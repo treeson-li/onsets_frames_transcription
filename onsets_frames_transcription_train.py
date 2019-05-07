@@ -21,13 +21,18 @@ from __future__ import print_function
 import os
 
 from magenta.common import tf_utils
-from magenta.models.onsets_frames_transcription import constants
-from magenta.models.onsets_frames_transcription import model
-from magenta.models.onsets_frames_transcription import train_util
+import constants
+import model
+import train_util
 
 import tensorflow as tf
 
 FLAGS = tf.app.flags.FLAGS
+
+tf.app.flags.DEFINE_string("ps_hosts", "localhost:2222", "ps hosts")
+tf.app.flags.DEFINE_string("worker_hosts", "localhost:2223,localhost:2224", "worker hosts")
+tf.app.flags.DEFINE_string("job_name", "worker", "'ps' or'worker'")
+tf.app.flags.DEFINE_integer("task_index", 0, "Index of task within the job")
 
 tf.app.flags.DEFINE_string('master', '',
                            'Name of the TensorFlow runtime to use.')
@@ -54,7 +59,7 @@ tf.app.flags.DEFINE_integer(
     'Number of batches to use during evaluation or `None` for all batches '
     'in the data source.')
 tf.app.flags.DEFINE_integer(
-    'checkpoints_to_keep', 100,
+    'checkpoints_to_keep', 1000,
     'Maximum number of checkpoints to keep in `train` mode or 0 for infinite.')
 tf.app.flags.DEFINE_enum('mode', 'train', ['train', 'eval', 'test'],
                          'Which mode to use.')
@@ -73,42 +78,51 @@ tf.app.flags.DEFINE_string(
 def run(hparams, run_dir):
   """Run train/eval/test."""
   train_dir = os.path.join(run_dir, 'train')
+  ps_hosts = FLAGS.ps_hosts.split(",")
+  worker_hosts = FLAGS.worker_hosts.split(",")  
+  # create the cluster configured by `ps_hosts' and 'worker_hosts'
+  cluster = tf.train.ClusterSpec({"ps": ps_hosts, "worker": worker_hosts})
+  server=tf.train.Server(cluster,job_name=FLAGS.job_name,
+                             task_index=FLAGS.task_index)
 
-  if FLAGS.mode == 'eval':
-    eval_dir = os.path.join(run_dir, 'eval')
-    if FLAGS.eval_dir:
-      eval_dir = os.path.join(eval_dir, FLAGS.eval_dir)
-    train_util.evaluate(
-        train_dir=train_dir,
-        eval_dir=eval_dir,
-        examples_path=FLAGS.examples_path,
-        num_batches=FLAGS.eval_num_batches,
-        hparams=hparams,
-        master=FLAGS.master)
-  elif FLAGS.mode == 'test':
-    checkpoint_path = tf.train.latest_checkpoint(train_dir)
-    if FLAGS.checkpoint_path:
-      checkpoint_path = os.path.expanduser(FLAGS.checkpoint_path)
-
-    tf.logging.info('Testing with checkpoint: %s', checkpoint_path)
-    test_dir = os.path.join(run_dir, 'test')
-    train_util.test(
-        checkpoint_path=checkpoint_path,
-        test_dir=test_dir,
-        examples_path=FLAGS.examples_path,
-        num_batches=FLAGS.eval_num_batches,
-        hparams=hparams,
-        master=FLAGS.master)
-  elif FLAGS.mode == 'train':
-    train_util.train(
-        train_dir=train_dir,
-        examples_path=FLAGS.examples_path,
-        hparams=hparams,
-        checkpoints_to_keep=FLAGS.checkpoints_to_keep,
-        num_steps=FLAGS.num_steps,
-        master=FLAGS.master,
-        task=FLAGS.ps_task,
-        num_ps_tasks=FLAGS.num_ps_tasks)
+  if FLAGS.job_name == "ps":
+    server.join()  # ps hosts only join
+  elif FLAGS.job_name == "worker":
+    if FLAGS.mode == 'eval':
+      eval_dir = os.path.join(run_dir, 'eval')
+      if FLAGS.eval_dir:
+        eval_dir = os.path.join(eval_dir, FLAGS.eval_dir)
+      train_util.evaluate(
+          train_dir=train_dir,
+          eval_dir=eval_dir,
+          examples_path=FLAGS.examples_path,
+          num_batches=FLAGS.eval_num_batches,
+          hparams=hparams,
+          master=FLAGS.master)
+    elif FLAGS.mode == 'test':
+      checkpoint_path = tf.train.latest_checkpoint(train_dir)
+      if FLAGS.checkpoint_path:
+        checkpoint_path = os.path.expanduser(FLAGS.checkpoint_path)
+  
+      tf.logging.info('Testing with checkpoint: %s', checkpoint_path)
+      test_dir = os.path.join(run_dir, 'test')
+      train_util.test(
+          checkpoint_path=checkpoint_path,
+          test_dir=test_dir,
+          examples_path=FLAGS.examples_path,
+          num_batches=FLAGS.eval_num_batches,
+          hparams=hparams,
+          master=FLAGS.master)
+    elif FLAGS.mode == 'train':
+      train_util.train(
+          train_dir=train_dir,
+          examples_path=FLAGS.examples_path,
+          hparams=hparams,
+          checkpoints_to_keep=FLAGS.checkpoints_to_keep,
+          num_steps=FLAGS.num_steps,
+          master=server.target,
+          task_index=FLAGS.task_index,
+          cluster=cluster)
 
 
 def main(unused_argv):

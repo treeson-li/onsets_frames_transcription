@@ -18,9 +18,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from magenta.models.onsets_frames_transcription import data
-from magenta.models.onsets_frames_transcription import infer_util
-from magenta.models.onsets_frames_transcription import model
+import data
+import infer_util
+import model
 from magenta.music import sequences_lib
 
 from mir_eval.transcription import precision_recall_f1_overlap
@@ -80,18 +80,19 @@ def train(train_dir,
           keep_checkpoint_every_n_hours=1,
           num_steps=None,
           master='',
-          task=0,
-          num_ps_tasks=0):
+          task_index=0,
+          cluster=None):
   """Train loop."""
   tf.gfile.MakeDirs(train_dir)
-  is_chief = task == 0
+  is_chief = task_index == 0
 
   if is_chief:
     _trial_summary(hparams, examples_path, train_dir)
 
   with tf.Graph().as_default():
     with tf.device(
-        tf.train.replica_device_setter(num_ps_tasks, merge_devices=True)):
+        tf.train.replica_device_setter(worker_device="/job:worker/task:%d" % (task_index),
+                                                      cluster=cluster)):
       transcription_data = _get_data(examples_path, hparams, is_training=True)
 
       loss, losses, unused_labels, unused_predictions, images = model.get_model(
