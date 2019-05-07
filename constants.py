@@ -19,7 +19,7 @@ from __future__ import print_function
 
 import librosa
 from magenta.common import tf_utils
-from magenta.models.onsets_frames_transcription import audio_transform
+import audio_transform
 import tensorflow as tf
 
 DEFAULT_SAMPLE_RATE = 16000

@@ -20,7 +20,7 @@ from __future__ import print_function
 
 from magenta.common import flatten_maybe_padded_sequences
 from magenta.common import tf_utils
-from magenta.models.onsets_frames_transcription import constants
+import constants
 
 import tensorflow as tf
 
