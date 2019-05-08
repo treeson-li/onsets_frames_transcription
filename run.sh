@@ -1,7 +1,8 @@
-IN_EXAMPLES=/media/admin1/Windows/MAPS_TFRECORD/maps_config2_train.tfrecord
+TRAIN_EXAMPLES=/media/admin1/Windows/MAPS_TFRECORD/maps_config2_train.tfrecord
 RUN_DIR=~/data/MAPS_ori/
 
 onsets_frames_transcription_train \
 	  --examples_path="${TRAIN_EXAMPLES}" \
 	    --run_dir="${RUN_DIR}" \
 	      --mode='train'
+
