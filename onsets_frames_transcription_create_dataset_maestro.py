@@ -18,14 +18,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from magenta.models.onsets_frames_transcription import configs
+from magenta.models.onsets_frames_transcription import create_dataset_maestro
 import tensorflow as tf
-import create_dataset_maestro
 
 
 def main(argv):
   del argv
 
-  create_dataset_maestro.pipeline()
+  create_dataset_maestro.pipeline(
+      configs.CONFIG_MAP, configs.DATASET_CONFIG_MAP)
 
 
 def console_entry_point():

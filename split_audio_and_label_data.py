@@ -237,7 +237,9 @@ def process_record(wav_data,
                    example_id,
                    min_length=5,
                    max_length=20,
-                   sample_rate=16000):
+                   sample_rate=16000,
+                   allow_empty_notesequence=False,
+                   load_audio_with_librosa=False):
   """Split a record into chunks and create an example proto.
 
   To use the full length audio and notesequence, set min_length=0 and
@@ -250,11 +252,20 @@ def process_record(wav_data,
     min_length: minimum length in seconds for audio chunks.
     max_length: maximum length in seconds for audio chunks.
     sample_rate: desired audio sample rate.
+    allow_empty_notesequence: whether an empty NoteSequence is allowed.
+    load_audio_with_librosa: Use librosa for sampling. Works with 24-bit wavs.
 
   Yields:
     Example protos.
   """
-  samples = audio_io.wav_data_to_samples(wav_data, sample_rate)
+  try:
+    if load_audio_with_librosa:
+      samples = audio_io.wav_data_to_samples_librosa(wav_data, sample_rate)
+    else:
+      samples = audio_io.wav_data_to_samples(wav_data, sample_rate)
+  except audio_io.AudioIOReadError as e:
+    print('Exception %s', e)
+    return
   samples = librosa.util.normalize(samples, norm=np.inf)
   if max_length == min_length:
     splits = np.arange(0, ns.total_time, max_length)
@@ -263,8 +274,8 @@ def process_record(wav_data,
   else:
     splits = [0, ns.total_time]
   velocities = [note.velocity for note in ns.notes]
-  velocity_max = np.max(velocities)
-  velocity_min = np.min(velocities)
+  velocity_max = np.max(velocities) if velocities else 0
+  velocity_min = np.min(velocities) if velocities else 0
   velocity_range = music_pb2.VelocityRange(min=velocity_min, max=velocity_max)
 
   for start, end in zip(splits[:-1], splits[1:]):
@@ -276,7 +287,7 @@ def process_record(wav_data,
     else:
       new_ns = sequences_lib.extract_subsequence(ns, start, end)
 
-    if not new_ns.notes:
+    if not new_ns.notes and not allow_empty_notesequence:
       tf.logging.warning('skipping empty sequence')
       continue
 

@@ -50,7 +50,7 @@ import tensorflow as tf
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('input_dir', None,
                            'Directory where the un-zipped MAPS files are.')
-tf.app.flags.DEFINE_string('output_dir', '/media/ps/Windows/Data/google_maestro_tfrecord/',
+tf.app.flags.DEFINE_string('output_dir', './',
                            'Directory where the two output TFRecord files '
                            '(train and test) will be placed.')
 tf.app.flags.DEFINE_integer('min_length', 5, 'minimum segment length')

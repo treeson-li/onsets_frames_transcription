@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import constants
+from magenta.models.onsets_frames_transcription import constants
 from magenta.music import sequences_lib
 import mir_eval
 import numpy as np
@@ -44,7 +44,11 @@ def sequence_to_valued_intervals(note_sequence,
     pitches.append(note.pitch)
     velocities.append(note.velocity)
 
-  return np.array(intervals), np.array(pitches), np.array(velocities)
+  # Reshape intervals to ensure that the second dim is 2, even if the list is
+  # of size 0. mir_eval functions will complain if intervals is not shaped
+  # appropriately.
+  return (np.array(intervals).reshape((-1, 2)), np.array(pitches),
+          np.array(velocities))
 
 
 def f1_score(precision, recall):
@@ -93,8 +97,10 @@ def frame_metrics(frame_labels, frame_predictions):
   frame_false_negatives = tf.reduce_sum(tf.to_float(tf.logical_and(
       tf.equal(frame_labels_bool, True),
       tf.equal(frame_predictions_bool, False))))
-  frame_accuracy = tf.reduce_sum(tf.to_float(
-      tf.equal(frame_labels_bool, frame_predictions_bool)))
+  frame_accuracy = (
+      tf.reduce_sum(
+          tf.to_float(tf.equal(frame_labels_bool, frame_predictions_bool))) /
+      tf.cast(tf.size(frame_labels), tf.float32))
 
   frame_precision = tf.where(
       tf.greater(frame_true_positives + frame_false_positives, 0),
@@ -200,9 +206,8 @@ def define_metrics(num_dims):
             metric_frame_predictions)
 
 
-def score_sequence(session, global_step_increment, summary_op, summary_writer,
-                   metrics_to_updates, metric_note_precision,
-                   metric_note_recall, metric_note_f1,
+def score_sequence(session, global_step_increment, metrics_to_updates,
+                   metric_note_precision, metric_note_recall, metric_note_f1,
                    metric_note_precision_with_offsets,
                    metric_note_recall_with_offsets, metric_note_f1_with_offsets,
                    metric_note_precision_with_offsets_velocity,
@@ -285,17 +290,9 @@ def score_sequence(session, global_step_increment, summary_op, summary_writer,
           metric_note_f1_with_offsets_velocity:
               sequence_note_f1_with_offsets_velocity,
       })
-  # Running the summary op separately ensures that all of the metrics have been
-  # updated before we try to query them.
-  summary = session.run(summary_op)
 
-  tf.logging.info(
-      'Writing score summary for %s: Step= %d, Note F1=%f',
-      sequence_id, global_step, sequence_note_f1)
-  summary_writer.add_summary(summary, global_step)
-  summary_writer.flush()
-
-  return sequence_label
+  tf.logging.info('Updating scores for %s: Step= %d, Note F1=%f', sequence_id,
+                  global_step, sequence_note_f1)
 
 
 def posterior_pianoroll_image(frame_probs, sequence_prediction,

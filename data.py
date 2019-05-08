@@ -27,26 +27,18 @@ from __future__ import print_function
 
 import collections
 import functools
-import os
 import wave
+import zlib
 
 import librosa
-import audio_transform
-import constants
+from magenta.models.onsets_frames_transcription import audio_transform
+from magenta.models.onsets_frames_transcription import constants
 from magenta.music import audio_io
 from magenta.music import sequences_lib
 from magenta.protobuf import music_pb2
 import numpy as np
 import six
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
-
-
-BATCH_QUEUE_CAPACITY_SEQUENCES = 50
-
-# This is the number of threads that take the records from the reader(s),
-# load the audio, create the spectrograms, and put them into the batch queue.
-NUM_BATCH_THREADS = 1
 
 
 def hparams_frame_size(hparams):
@@ -143,6 +135,21 @@ def wav_to_spec_op(wav_audio, hparams):
   return spec
 
 
+def get_spectrogram_hash_op(spectrogram):
+  """Calculate hash of the spectrogram."""
+  def get_spectrogram_hash(spectrogram):
+    # Compute a hash of the spectrogram, save it as an int64.
+    # Uses adler because it's fast and will fit into an int (md5 is too large).
+    spectrogram_serialized = six.BytesIO()
+    np.save(spectrogram_serialized, spectrogram)
+    spectrogram_hash = np.int64(zlib.adler32(spectrogram_serialized.getvalue()))
+    return spectrogram_hash
+  spectrogram_hash = tf.py_func(get_spectrogram_hash, [spectrogram], tf.int64,
+                                name='get_spectrogram_hash')
+  spectrogram_hash.set_shape([])
+  return spectrogram_hash
+
+
 def wav_to_num_frames(wav_audio, frames_per_second):
   """Transforms a wav-encoded audio string into number of frames."""
   w = wave.open(six.BytesIO(wav_audio))
@@ -160,66 +167,20 @@ def wav_to_num_frames_op(wav_audio, frames_per_second):
   return res
 
 
-def _find_first_note_start(sequence):
-  first_note = sorted(sequence.notes, key=lambda n: n.start_time)[0]
-  return first_note.start_time
+def transform_wav_data_op(wav_data_tensor, hparams, jitter_amount_sec):
+  """Transforms with audio for data augmentation. Only for training."""
 
-
-def preprocess_sequence(sequence_tensor, hparams):
-  """Preprocess a NoteSequence for training.
-
-  Deserialize, apply sustain control changes, and crop the sequence to the
-  beginning of the first note and end of the last note (if requested).
-
-  Args:
-    sequence_tensor: The NoteSequence in serialized form.
-    hparams: Current hyperparameters.
-
-  Returns:
-    sequence: The preprocessed NoteSequence object.
-    cropped_beginning_seconds: How many seconds were cropped from the beginning
-        of the NoteSequence.
-  """
-  sequence = music_pb2.NoteSequence.FromString(sequence_tensor)
-  sequence = sequences_lib.apply_sustain_control_changes(sequence)
-  crop_beginning_seconds = 0
-  if hparams.crop_training_sequence_to_notes and sequence.notes:
-    crop_beginning_seconds = _find_first_note_start(sequence)
-    sequence = sequences_lib.extract_subsequence(
-        sequence, crop_beginning_seconds, sequence.total_time)
-
-  return sequence, crop_beginning_seconds
-
-
-def transform_wav_data_op(wav_data_tensor, sequence_tensor, hparams,
-                          is_training, jitter_amount_sec):
-  """Transforms with sox."""
-
-  def transform_wav_data(wav_data, sequence_tensor):
+  def transform_wav_data(wav_data):
     """Transforms with sox."""
-    sequence, cropped_beginning_seconds = preprocess_sequence(
-        sequence_tensor, hparams)
-
-    # Only do audio transformations during training.
-    if is_training:
+    if jitter_amount_sec:
       wav_data = audio_io.jitter_wav_data(wav_data, hparams.sample_rate,
                                           jitter_amount_sec)
-      wav_data = audio_transform.transform_wav_audio(wav_data, hparams)
-
-    # If requested, crop wav.
-    if hparams.crop_training_sequence_to_notes:
-      wav_data = audio_io.crop_wav_data(wav_data, hparams.sample_rate,
-                                        cropped_beginning_seconds,
-                                        sequence.total_time)
-
-    # Normalize.
-    if hparams.normalize_audio:
-      wav_data = audio_io.normalize_wav_data(wav_data, hparams.sample_rate)
+    wav_data = audio_transform.transform_wav_audio(wav_data, hparams)
 
     return [wav_data]
 
   return tf.py_func(
-      transform_wav_data, [wav_data_tensor, sequence_tensor],
+      transform_wav_data, [wav_data_tensor],
       tf.string,
       name='transform_wav_data_op')
 
@@ -230,8 +191,8 @@ def sequence_to_pianoroll_op(sequence_tensor, velocity_range_tensor, hparams):
   def sequence_to_pianoroll_fn(sequence_tensor, velocity_range_tensor):
     """Converts sequence to pianorolls."""
     velocity_range = music_pb2.VelocityRange.FromString(velocity_range_tensor)
-    sequence, unused_cropped_beginning_seconds = preprocess_sequence(
-        sequence_tensor, hparams)
+    sequence = music_pb2.NoteSequence.FromString(sequence_tensor)
+    sequence = sequences_lib.apply_sustain_control_changes(sequence)
     roll = sequences_lib.sequence_to_pianoroll(
         sequence,
         frames_per_second=hparams_frames_per_second(hparams),
@@ -311,25 +272,26 @@ def truncate_note_sequence_op(sequence_tensor, truncated_length_frames,
 
 
 InputTensors = collections.namedtuple(
-    'InputTensors',
-    ('spec', 'labels', 'label_weights', 'length', 'onsets', 'offsets',
-     'velocities', 'velocity_range', 'filename', 'note_sequence'))
+    'InputTensors', ('spec', 'spectrogram_hash', 'labels', 'label_weights',
+                     'length', 'onsets', 'offsets', 'velocities', 'sequence_id',
+                     'note_sequence'))
 
 
-def _preprocess_data(sequence, audio, velocity_range, hparams, is_training):
+def preprocess_data(sequence_id, sequence, audio, velocity_range, hparams,
+                    is_training):
   """Compute spectral representation, labels, and length from sequence/audio.
 
   Args:
+    sequence_id: id of the sequence.
     sequence: String tensor containing serialized NoteSequence proto.
     audio: String tensor containing containing WAV data.
-    velocity_range: String tensor containing max and min velocities of file as
-        a serialized VelocityRange.
+    velocity_range: String tensor containing max and min velocities of file as a
+      serialized VelocityRange.
     hparams: HParams object specifying hyperparameters.
     is_training: Whether or not this is a training run.
 
   Returns:
-    A 3-tuple of tensors containing CQT, pianoroll labels, and number of frames
-    respectively.
+    An InputTensors tuple.
 
   Raises:
     ValueError: If hparams is contains an invalid spec_type.
@@ -349,87 +311,92 @@ def _preprocess_data(sequence, audio, velocity_range, hparams, is_training):
     sequence = jitter_label_op(sequence,
                                hparams.backward_shift_amount_ms / 1000.)
 
-  transformed_wav = transform_wav_data_op(
-      audio,
-      sequence,
-      hparams=hparams,
-      is_training=is_training,
-      jitter_amount_sec=wav_jitter_amount_ms / 1000.)
+  if is_training:
+    audio = transform_wav_data_op(
+        audio,
+        hparams=hparams,
+        jitter_amount_sec=wav_jitter_amount_ms / 1000.)
 
-  spec = wav_to_spec_op(transformed_wav, hparams=hparams)
+  spec = wav_to_spec_op(audio, hparams=hparams)
+  spectrogram_hash = get_spectrogram_hash_op(spec)
 
   labels, label_weights, onsets, offsets, velocities = sequence_to_pianoroll_op(
       sequence, velocity_range, hparams=hparams)
 
-  length = wav_to_num_frames_op(
-      transformed_wav, hparams_frames_per_second(hparams))
+  length = wav_to_num_frames_op(audio, hparams_frames_per_second(hparams))
 
-  return (spec, labels, label_weights, length, onsets,
-          offsets, velocities, velocity_range)
+  asserts = []
+  if hparams.max_expected_train_example_len and is_training:
+    asserts.append(
+        tf.assert_less_equal(length, hparams.max_expected_train_example_len))
 
-
-def _get_input_tensors_from_examples_list(examples_list, is_training):
-  """Get input tensors from a list or placeholder of examples."""
-  # Iterate through all data to determine how many records there are.
-  # Only necessary during eval, and not possible if examples_list is a
-  # placeholder.
-  num_examples = 0
-  if not is_training and not isinstance(examples_list, tf.Tensor):
-    num_examples = len(examples_list)
-    tf.logging.info('Found %d examples in example list', num_examples)
-
-  return tf.data.Dataset.from_tensor_slices(examples_list), num_examples
-
-
-def _get_input_tensors_from_tfrecord(files, is_training):
-  """Creates a DatasetData to read transcription data from TFRecord."""
-  # Iterate through all data to determine how many records there are.
-  num_examples = 0
-  if not is_training:
-    tf.logging.info('Finding number of examples in %s', files)
-    data_files = slim.parallel_reader.get_data_files(files)
-    for filename in data_files:
-      for unused_r in tf.python_io.tf_record_iterator(filename):
-        num_examples += 1
-    tf.logging.info('Found %d examples in %s', num_examples, files)
-
-  return tf.data.TFRecordDataset(files), num_examples
+  with tf.control_dependencies(asserts):
+    return InputTensors(
+        spec=spec,
+        spectrogram_hash=spectrogram_hash,
+        labels=labels,
+        label_weights=label_weights,
+        length=length,
+        onsets=onsets,
+        offsets=offsets,
+        velocities=velocities,
+        sequence_id=sequence_id,
+        note_sequence=sequence)
 
 
-class TranscriptionData(dict):
-  """A dictionary with attribute access to keys for storing input Tensors."""
+FeatureTensors = collections.namedtuple(
+    'FeatureTensors', ('spec', 'length', 'sequence_id', 'spectrogram_hash'))
+LabelTensors = collections.namedtuple(
+    'LabelTensors', ('labels', 'label_weights', 'onsets', 'offsets',
+                     'velocities', 'note_sequence'))
 
-  def __init__(self, *args, **kwargs):
-    super(TranscriptionData, self).__init__(*args, **kwargs)
-    self.__dict__ = self
 
-
-def _provide_data(input_tensors, truncated_length, hparams,
-                  include_note_sequences):
+def _provide_data(input_tensors, hparams, is_training):
   """Returns tensors for reading batches from provider."""
-  (spec, labels, label_weights, length, onsets, offsets, velocities,
-   unused_velocity_range, filename, note_sequence) = input_tensors
+  length = tf.cast(input_tensors.length, tf.int32)
+  spectrogram_hash = tf.cast(input_tensors.spectrogram_hash, tf.int64)
+  labels = tf.reshape(input_tensors.labels, (-1, constants.MIDI_PITCHES))
+  label_weights = tf.reshape(input_tensors.label_weights,
+                             (-1, constants.MIDI_PITCHES))
+  onsets = tf.reshape(input_tensors.onsets, (-1, constants.MIDI_PITCHES))
+  offsets = tf.reshape(input_tensors.offsets, (-1, constants.MIDI_PITCHES))
+  velocities = tf.reshape(input_tensors.velocities,
+                          (-1, constants.MIDI_PITCHES))
+  spec = tf.reshape(input_tensors.spec, (-1, hparams_frame_size(hparams)))
 
-  length = tf.to_int32(length)
-  labels = tf.reshape(labels, (-1, constants.MIDI_PITCHES))
-  label_weights = tf.reshape(label_weights, (-1, constants.MIDI_PITCHES))
-  onsets = tf.reshape(onsets, (-1, constants.MIDI_PITCHES))
-  offsets = tf.reshape(offsets, (-1, constants.MIDI_PITCHES))
-  velocities = tf.reshape(velocities, (-1, constants.MIDI_PITCHES))
-  spec = tf.reshape(spec, (-1, hparams_frame_size(hparams)))
+  # Slice specs and labels tensors so they are no longer than truncated_length.
+  hparams_truncated_length = tf.cast(
+      hparams.truncated_length_secs * hparams_frames_per_second(hparams),
+      tf.int32)
+  if hparams.truncated_length_secs:
+    truncated_length = tf.reduce_min([hparams_truncated_length, length])
+  else:
+    truncated_length = length
 
-  truncated_length = (
-      tf.reduce_min([truncated_length, length]) if truncated_length else length)
+  if is_training:
+    truncated_note_sequence = tf.constant(0)
+  else:
+    truncated_note_sequence = truncate_note_sequence_op(
+        input_tensors.note_sequence, truncated_length, hparams)
 
-  # Pad or slice specs and labels tensors to have the same lengths,
-  # truncating after truncated_length.
-  spec_delta = tf.shape(spec)[0] - truncated_length
+  # If max_expected_train_example_len is set, ensure that all examples are
+  # padded to this length. This results in a fixed shape that can work on TPUs.
+  if hparams.max_expected_train_example_len and is_training:
+    # In this case, final_length is a constant.
+    if hparams.truncated_length_secs:
+      assert hparams.max_expected_train_example_len == hparams_truncated_length
+    final_length = hparams.max_expected_train_example_len
+  else:
+    # In this case, it is min(hparams.truncated_length, length)
+    final_length = truncated_length
+
+  spec_delta = tf.shape(spec)[0] - final_length
   spec = tf.case(
       [(spec_delta < 0,
         lambda: tf.pad(spec, tf.stack([(0, -spec_delta), (0, 0)]))),
        (spec_delta > 0, lambda: spec[0:-spec_delta])],
       default=lambda: spec)
-  labels_delta = tf.shape(labels)[0] - truncated_length
+  labels_delta = tf.shape(labels)[0] - final_length
   labels = tf.case(
       [(labels_delta < 0,
         lambda: tf.pad(labels, tf.stack([(0, -labels_delta), (0, 0)]))),
@@ -456,142 +423,110 @@ def _provide_data(input_tensors, truncated_length, hparams,
        (labels_delta > 0, lambda: velocities[0:-labels_delta])],
       default=lambda: velocities)
 
-  batch_tensors = {
-      'spec':
-          tf.reshape(spec, (truncated_length, hparams_frame_size(hparams), 1)),
-      'labels':
-          tf.reshape(labels, (truncated_length, constants.MIDI_PITCHES)),
-      'label_weights':
-          tf.reshape(label_weights, (truncated_length, constants.MIDI_PITCHES)),
-      'lengths':
-          truncated_length,
-      'onsets':
-          tf.reshape(onsets, (truncated_length, constants.MIDI_PITCHES)),
-      'offsets':
-          tf.reshape(offsets, (truncated_length, constants.MIDI_PITCHES)),
-      'velocities':
-          tf.reshape(velocities, (truncated_length, constants.MIDI_PITCHES)),
-      'filenames':
-          filename,
-  }
+  features = FeatureTensors(
+      spec=tf.reshape(spec, (final_length, hparams_frame_size(hparams), 1)),
+      length=truncated_length,
+      sequence_id=tf.constant(0) if is_training else input_tensors.sequence_id,
+      spectrogram_hash=spectrogram_hash)
+  labels = LabelTensors(
+      labels=tf.reshape(labels, (final_length, constants.MIDI_PITCHES)),
+      label_weights=tf.reshape(label_weights,
+                               (final_length, constants.MIDI_PITCHES)),
+      onsets=tf.reshape(onsets, (final_length, constants.MIDI_PITCHES)),
+      offsets=tf.reshape(offsets, (final_length, constants.MIDI_PITCHES)),
+      velocities=tf.reshape(velocities, (final_length, constants.MIDI_PITCHES)),
+      note_sequence=truncated_note_sequence)
 
-  if include_note_sequences:
-    truncated_note_sequence = truncate_note_sequence_op(
-        note_sequence, truncated_length, hparams)
-    batch_tensors['note_sequences'] = truncated_note_sequence
-
-  return batch_tensors
+  return features, labels
 
 
-def provide_batch(batch_size,
-                  examples,
+def provide_batch(examples,
+                  preprocess_examples,
                   hparams,
-                  truncated_length=0,
                   is_training=True,
-                  include_note_sequences=False):
+                  shuffle_buffer_size=64):
   """Returns batches of tensors read from TFRecord files.
 
   Args:
-    batch_size: The integer number of records per batch.
     examples: A string path to a TFRecord file of examples, a python list of
       serialized examples, or a Tensor placeholder for serialized examples.
+    preprocess_examples: Whether to preprocess examples. If False, assume they
+      have already been preprocessed.
     hparams: HParams object specifying hyperparameters.
-    truncated_length: An optional integer specifying whether sequences should be
-      truncated this length.
     is_training: Whether this is a training run.
-    include_note_sequences: Whether to include the original NoteSequence in the
-      data or just an empty string. Note that the entire NoteSequence is
-      included for every example, so when training an acoustic model, this can
-      lead to excessive memory usage.
+    shuffle_buffer_size: Buffer size used to shuffle records.
 
   Returns:
     Batched tensors in a TranscriptionData NamedTuple.
   """
-  # Do data pre-processing on the CPU instead of the GPU.
-  with tf.device('/cpu:0'):
-    if isinstance(examples, str):
-      # Read examples from a TFRecord file containing serialized NoteSequence
-      # and audio.
-      files = tf.gfile.Glob(os.path.expanduser(examples))
-      input_dataset, num_samples = _get_input_tensors_from_tfrecord(
-          files, is_training)
+  if isinstance(examples, str):
+    # Read examples from a TFRecord file containing serialized NoteSequence
+    # and audio.
+    filenames = tf.data.Dataset.list_files(examples, shuffle=is_training)
+    if is_training:
+      input_dataset = filenames.apply(
+          tf.data.experimental.parallel_interleave(
+              tf.data.TFRecordDataset, sloppy=True, cycle_length=8))
     else:
-      input_dataset, num_samples = _get_input_tensors_from_examples_list(
-          examples, is_training)
+      input_dataset = tf.data.TFRecordDataset(filenames)
+  else:
+    input_dataset = tf.data.Dataset.from_tensor_slices(examples)
 
-    def _parse(example_proto):
-      features = {
-          'id': tf.FixedLenFeature(shape=(), dtype=tf.string),
-          'sequence': tf.FixedLenFeature(shape=(), dtype=tf.string),
-          'audio': tf.FixedLenFeature(shape=(), dtype=tf.string),
-          'velocity_range': tf.FixedLenFeature(shape=(), dtype=tf.string),
-      }
-      return tf.parse_single_example(example_proto, features)
+  if is_training:
+    input_dataset = input_dataset.apply(
+        tf.data.experimental.shuffle_and_repeat(shuffle_buffer_size))
 
-    def _preprocess(record):
-      (spec, labels, label_weights, length, onsets,
-       offsets, velocities, velocity_range) = _preprocess_data(
-           record['sequence'], record['audio'], record['velocity_range'],
-           hparams, is_training)
-      return InputTensors(
-          spec=spec,
-          labels=labels,
-          label_weights=label_weights,
-          length=length,
-          onsets=onsets,
-          offsets=offsets,
-          velocities=velocities,
-          velocity_range=velocity_range,
-          filename=record['id'],
-          note_sequence=record['sequence'])
+  def _preprocess(example_proto):
+    """Process an Example proto into a model input."""
+    features = {
+        'id': tf.FixedLenFeature(shape=(), dtype=tf.string),
+        'sequence': tf.FixedLenFeature(shape=(), dtype=tf.string),
+        'audio': tf.FixedLenFeature(shape=(), dtype=tf.string),
+        'velocity_range': tf.FixedLenFeature(shape=(), dtype=tf.string),
+    }
+    record = tf.parse_single_example(example_proto, features)
+    input_tensors = preprocess_data(record['id'], record['sequence'],
+                                    record['audio'], record['velocity_range'],
+                                    hparams, is_training)
+    return _provide_data(
+        input_tensors, hparams=hparams, is_training=is_training)
 
-    input_dataset = input_dataset.map(_parse).map(
-        _preprocess, num_parallel_calls=NUM_BATCH_THREADS)
+  def _parse(example_proto):
+    """Process an Example proto into a model input."""
+    features = {
+        'spec': tf.VarLenFeature(dtype=tf.float32),
+        'spectrogram_hash': tf.FixedLenFeature(shape=(), dtype=tf.int64),
+        'labels': tf.VarLenFeature(dtype=tf.float32),
+        'label_weights': tf.VarLenFeature(dtype=tf.float32),
+        'length': tf.FixedLenFeature(shape=(), dtype=tf.int64),
+        'onsets': tf.VarLenFeature(dtype=tf.float32),
+        'offsets': tf.VarLenFeature(dtype=tf.float32),
+        'velocities': tf.VarLenFeature(dtype=tf.float32),
+        'sequence_id': tf.FixedLenFeature(shape=(), dtype=tf.string),
+        'note_sequence': tf.FixedLenFeature(shape=(), dtype=tf.string),
+    }
+    record = tf.parse_single_example(example_proto, features)
+    input_tensors = InputTensors(
+        spec=tf.sparse.to_dense(record['spec']),
+        spectrogram_hash=record['spectrogram_hash'],
+        labels=tf.sparse.to_dense(record['labels']),
+        label_weights=tf.sparse.to_dense(record['label_weights']),
+        length=record['length'],
+        onsets=tf.sparse.to_dense(record['onsets']),
+        offsets=tf.sparse.to_dense(record['offsets']),
+        velocities=tf.sparse.to_dense(record['velocities']),
+        sequence_id=record['sequence_id'],
+        note_sequence=record['note_sequence'])
+    return _provide_data(
+        input_tensors, hparams=hparams, is_training=is_training)
 
-    if is_training:
-      input_dataset = input_dataset.repeat()
-
-    batch_queue_capacity = BATCH_QUEUE_CAPACITY_SEQUENCES
-
-    dataset = input_dataset.map(
-        functools.partial(
-            _provide_data,
-            truncated_length=truncated_length,
-            hparams=hparams,
-            include_note_sequences=include_note_sequences),
-        num_parallel_calls=NUM_BATCH_THREADS)
-
-    if is_training:
-      dataset = dataset.shuffle(buffer_size=batch_queue_capacity // 10)
-
-    # batching/padding
+  dataset = input_dataset.map(_preprocess if preprocess_examples else _parse)
+  if hparams.max_expected_train_example_len:
+    dataset = dataset.batch(hparams.batch_size, drop_remainder=is_training)
+  else:
     dataset = dataset.padded_batch(
-        batch_size, padded_shapes=dataset.output_shapes)
+        hparams.batch_size, padded_shapes=dataset.output_shapes)
 
-    # Round down because allow_smaller_final_batch=False.
-    num_batches = None
-    if num_samples:
-      num_batches = num_samples // batch_size
+  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
-    if not is_training and num_batches is not None:
-      # TODO(fjord): Should no longer need this now that we're using Dataset.
-      # But we have other code that expects all batches to be the same size.
-      # Emulate behavior of train.batch with allow_smaller_final_batch=False.
-      dataset = dataset.take(num_batches)
-
-    dataset = dataset.prefetch(batch_queue_capacity)
-
-    if isinstance(examples, tf.Tensor):
-      iterator = dataset.make_initializable_iterator()
-    else:
-      iterator = dataset.make_one_shot_iterator()
-
-    data = TranscriptionData(iterator.get_next())
-    data['max_length'] = tf.reduce_max(data['lengths'])
-    if num_batches:
-      # TODO(fjord): Should no longer need this now that we're using Dataset.
-      # But we have other code that expects to know how many batches are in
-      # the eval set instead of just stopping after getting an exception.
-      data['num_batches'] = num_batches
-
-    return data, iterator
+  return dataset
