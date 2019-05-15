@@ -21,7 +21,7 @@ from __future__ import print_function
 import copy
 import functools
 
-from magenta.models.onsets_frames_transcription import data
+import data
 
 import tensorflow as tf
 
@@ -71,8 +71,8 @@ def create_estimator(model_fn,
                      hparams,
                      use_tpu=False,
                      master='',
-                     save_checkpoint_steps=300,
-                     save_summary_steps=300,
+                     save_checkpoint_steps=5000,
+                     save_summary_steps=5000,
                      keep_checkpoint_max=None,
                      warm_start_from=None):
   """Creates an estimator."""
