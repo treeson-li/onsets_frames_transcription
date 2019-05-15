@@ -20,8 +20,8 @@ from __future__ import print_function
 
 import os
 
-from magenta.models.onsets_frames_transcription import configs
-from magenta.models.onsets_frames_transcription import train_util
+import configs
+import train_util
 
 import tensorflow as tf
 
@@ -32,21 +32,21 @@ tf.app.flags.DEFINE_string('master', '',
 tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
 tf.app.flags.DEFINE_string(
-    'examples_path', None,
+    'examples_path', '/media/admin1/Windows/MAPS_TFRECORD/maps_config2_train.tfrecord',
     'Path to a TFRecord file of train/eval examples.')
 tf.app.flags.DEFINE_boolean(
     'preprocess_examples', True,
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/tmp/onsets_frames',
+    'model_dir', '~/data/MAPS_ori1GPU/',
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')
 tf.app.flags.DEFINE_integer('num_steps', 1000000,
                             'Number of training steps or `None` for infinite.')
 tf.app.flags.DEFINE_integer(
-    'eval_num_steps', None,
+    'eval_num_steps', 10000,
     'Number of eval steps or `None` to go through all examples.')
 tf.app.flags.DEFINE_integer(
     'keep_checkpoint_max', 10000,
