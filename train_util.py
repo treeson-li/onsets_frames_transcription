@@ -21,7 +21,7 @@ from __future__ import print_function
 import copy
 import functools
 
-import data
+from magenta.models.onsets_frames_transcription import data
 
 import tensorflow as tf
 

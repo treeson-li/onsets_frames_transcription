@@ -20,7 +20,7 @@ from __future__ import print_function
 
 import os
 
-import configs
+from magenta.models.onsets_frames_transcription import configs
 import train_util
 
 import tensorflow as tf
@@ -39,7 +39,7 @@ tf.app.flags.DEFINE_boolean(
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/data/MAPS_ori1GPU/',
+    'model_dir', '~/data/onsets_frames_ori/',
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')
