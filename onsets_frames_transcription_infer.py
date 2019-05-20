@@ -53,10 +53,10 @@ tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
 tf.app.flags.DEFINE_string('model_dir', None, 'Path to look for checkpoints.')
 tf.app.flags.DEFINE_string(
-    'checkpoint_path', None,
+    'checkpoint_path', '~/data/onsets_frames_ori',
     'Filename of the checkpoint to use. If not specified, will use the latest '
     'checkpoint')
-tf.app.flags.DEFINE_string('examples_path', None,
+tf.app.flags.DEFINE_string('examples_path', '/media/admin1/Windows/MAPS_TFRECORD/maps_config2_test.tfrecord',
                            'Path to test examples TFRecord.')
 tf.app.flags.DEFINE_string(
     'output_dir', '~/tmp/onsets_frames/infer',
