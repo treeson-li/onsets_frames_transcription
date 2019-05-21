@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from magenta.models.onsets_frames_transcription import constants
+import constants
 from magenta.music import sequences_lib
 import mir_eval
 import numpy as np

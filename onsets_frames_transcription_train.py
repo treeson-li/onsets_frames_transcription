@@ -20,7 +20,7 @@ from __future__ import print_function
 
 import os
 
-from magenta.models.onsets_frames_transcription import configs
+import configs
 import train_util
 
 import tensorflow as tf

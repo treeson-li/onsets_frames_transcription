@@ -31,8 +31,8 @@ import wave
 import zlib
 
 import librosa
-from magenta.models.onsets_frames_transcription import audio_transform
-from magenta.models.onsets_frames_transcription import constants
+import audio_transform
+import constants
 from magenta.music import audio_io
 from magenta.music import sequences_lib
 from magenta.protobuf import music_pb2
