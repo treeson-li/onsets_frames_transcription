@@ -25,8 +25,8 @@ import re
 import apache_beam as beam
 from apache_beam.metrics import Metrics
 
-from magenta.models.onsets_frames_transcription import data
-from magenta.models.onsets_frames_transcription import split_audio_and_label_data
+import data
+import split_audio_and_label_data
 from magenta.protobuf import music_pb2
 
 import tensorflow as tf
