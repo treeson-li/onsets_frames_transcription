@@ -17,16 +17,15 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import tensorflow as tf
+import tensorflow.contrib.slim as slim
 import functools
 
 from magenta.common import flatten_maybe_padded_sequences
 from magenta.common import tf_utils
 import constants
 
-import tensorflow as tf
-
-import tensorflow.contrib.slim as slim
+import attention
 
 
 def conv_net(inputs, hparams):
@@ -152,6 +151,72 @@ def cudnn_lstm_layer(inputs,
 
     return outputs
 
+def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch_size):
+  dec_hidden = enc_hidden
+  outputs = []
+  decoder = attention.Decoder(num_units, batch_size)
+  # Teacher forcing - feeding the target as the next input
+  for t in range(0, labels.shape[0]):
+    # using teacher forcing
+    t1 = t-1 if t > 0 else 0
+    dec_input = tf.concat([inputs[t-1], labels[t-1]], axix=1)
+    dec_input = tf.expand_dims(dec_input, 1)
+    # passing enc_output to the decoder
+    predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
+    outputs.append(predictions)
+
+  return outputs
+
+def attention_gru_layer(inputs,
+                     batch_size,
+                     num_units,
+                     enc_output,
+                     enc_hidden,
+                     labels,
+                     lengths=None,
+                     stack_size=1,
+                     rnn_dropout_drop_amt=0,
+                     is_training=True,
+                     bidirectional=True):
+  """Create a GRU layer that uses cudnn."""
+  inputs_t = tf.transpose(inputs, [1, 0, 2])
+  labels_t = tf.transpose(labels, [1, 0, 2])
+  all_outputs = [inputs_t]
+  if lengths is not None:
+    for i in range(stack_size):
+      with tf.variable_scope('stack_' + str(i)):
+        with tf.variable_scope('forward'):
+          dec_hidden = enc_hidden[0] # the 1th element is for forward
+          outputs_fw = attention_mechanism(enc_hidden[0], 
+                                            enc_output[0],
+                                            inputs_t,
+                                            labels_t,
+                                            num_units)
+        combined_outputs = outputs_fw
+
+        if bidirectional:
+          with tf.variable_scope('backward'):
+            inputs_reversed = tf.reverse_sequence(inputs_t[-1], lengths, seq_axis=0, batch_axis=1)
+            labels_reversed = tf.reverse_sequence(labels_t[-1], lengths, seq_axis=0, batch_axis=1)
+            outputs_bw = attention_mechanism(enc_hidden[1], 
+                                            enc_output[1],
+                                            inputs_reversed,
+                                            labels_reversed,
+                                            num_units)
+            outputs_bw = tf.reverse_sequence(outputs_bw, lengths, seq_axis=0, batch_axis=1)
+
+          combined_outputs = tf.concat([outputs_fw, outputs_bw], axis=2)
+
+        all_outputs.append(combined_outputs)
+
+    # for consistency with cudnn, here we just return the top of the stack,
+    # although this can easily be altered to do other things, including be
+    # more resnet like
+    return tf.transpose(all_outputs[-1], [1, 0, 2])
+  else:
+    print("Error: No length in cudnn_gru_layer()")
+    sys.exit(0)
+
 
 def lstm_layer(inputs,
                batch_size,
@@ -208,6 +273,46 @@ def acoustic_model(inputs, hparams, lstm_units, lengths, is_training=True):
     return conv_output
 
 
+def attention_model(inputs, hparams, lstm_units, lengths, 
+                    enc_output, enc_hidden, labels,
+                    is_training=True):
+  """Attention model use Encoder-Attention-Decoder mechnism."""
+  conv_output = conv_net(inputs, hparams)
+
+  if lstm_units:
+    return attention_gru_layer(
+        conv_output,
+        hparams.batch_size,
+        lstm_units,
+        enc_output,
+        enc_hidden,
+        labels,
+        lengths=lengths if hparams.use_lengths else None,
+        stack_size=hparams.acoustic_rnn_stack_size,
+        is_training=is_training,
+        bidirectional=hparams.bidirectional)
+
+  else:
+    return conv_output
+
+def encoder_prepare(lstm_units, batach_size, lables, bidirectional):
+  ''' prepare encoder for attention '''
+  encoder_fw = attention.Encoder(lstm_units, batch_size)
+  enc_hidden_fw = encoder_fw.initialize_hidden_state()
+  enc_output_fw, enc_hidden_fw = encoder_fw(labels, enc_hidden)
+  enc_output = [enc_output_fw]
+  enc_hidden = [enc_hidden_fw]
+  labels_reversed = tf.reverse_sequence(lables[-1], lengths, seq_axis=1, batch_axis=0)
+  if bidirectional:
+    encoder_bw = attention.Encoder(lstm_units, batch_size)
+    enc_hidden_bw = encoder_bw.initialize_hidden_state()
+    enc_output_bw, enc_hidden_bw = encoder_bw(labels_reversed, onset_enc_hidden)
+
+    enc_output.append(enc_output_bw)
+    enc_hidden.append(enc_hidden_bw)
+    
+  return enc_output, enc_hidden
+
 def model_fn(features, labels, mode, params, config):
   """Builds the acoustic model."""
   del config
@@ -218,12 +323,11 @@ def model_fn(features, labels, mode, params, config):
 
   is_training = mode == tf.estimator.ModeKeys.TRAIN
 
-  if is_training:
-    onset_labels = labels.onsets
-    offset_labels = labels.offsets
-    velocity_labels = labels.velocities
-    frame_labels = labels.labels
-    frame_label_weights = labels.label_weights
+  onset_labels = labels.onsets
+  offset_labels = labels.offsets
+  velocity_labels = labels.velocities
+  frame_labels = labels.labels
+  frame_label_weights = labels.label_weights
 
   if hparams.stop_activation_gradient and not hparams.activation_loss:
     raise ValueError(
@@ -232,17 +336,24 @@ def model_fn(features, labels, mode, params, config):
   losses = {}
   with slim.arg_scope([slim.batch_norm, slim.dropout], is_training=is_training):
     with tf.variable_scope('onsets'):
-      onset_outputs = acoustic_model(
-          spec,
-          hparams,
-          lstm_units=hparams.onset_lstm_units,
-          lengths=length,
-          is_training=is_training)
+      enc_output, enc_hidden = encoder_prepare(hparams.onset_lstm_units, 
+                                                hparams.batch_size,
+                                                onset_labels,
+                                                hparams.bidirectional)
+      
+      onset_outputs = attention_model(spec,
+                                      hparams,
+                                      lstm_units=hparams.onset_lstm_units,
+                                      lengths=length,
+                                      enc_ouput=enc_output,
+                                      enc_hidden=enc_hidden,
+                                      labels=onset_labels,
+                                      is_training=is_training)
       onset_probs = slim.fully_connected(
-          onset_outputs,
-          constants.MIDI_PITCHES,
-          activation_fn=tf.sigmoid,
-          scope='onset_probs')
+                                      onset_outputs,
+                                      constants.MIDI_PITCHES,
+                                      activation_fn=tf.sigmoid,
+                                      scope='onset_probs')
 
       # onset_probs_flat is used during inference.
       onset_probs_flat = flatten_maybe_padded_sequences(onset_probs, length)
@@ -337,13 +448,19 @@ def model_fn(features, labels, mode, params, config):
       combined_probs = tf.concat(probs, 2)
 
       if hparams.combined_lstm_units > 0:
-        outputs = lstm_layer(
+        enc_output, enc_hidden = encoder_prepare(hparams.combined_lstm_units, 
+                                                hparams.batch_size,
+                                                frame_label_weights,
+                                                hparams.bidirectional)
+        outputs = attention_gru_layer(
             combined_probs,
             hparams.batch_size,
             hparams.combined_lstm_units,
+            enc_output,
+            enc_hidden,
+            frame_label_weights,
             lengths=length if hparams.use_lengths else None,
             stack_size=hparams.combined_rnn_stack_size,
-            use_cudnn=hparams.use_cudnn,
             is_training=is_training,
             bidirectional=hparams.bidirectional)
       else:
