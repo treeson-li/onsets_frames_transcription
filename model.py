@@ -296,7 +296,7 @@ def attention_model(inputs, hparams, lstm_units, lengths,
   else:
     return conv_output
 
-def encoder_prepare(lstm_units, batch_size, lables, lengths, bidirectional):
+def encoder_prepare(lstm_units, batch_size, labels, lengths, bidirectional):
   ''' prepare encoder for attention '''
   encoder_fw = attention.Encoder(lstm_units, batch_size)
   enc_hidden_fw = encoder_fw.initialize_hidden_state()
