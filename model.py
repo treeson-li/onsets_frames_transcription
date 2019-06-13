@@ -186,24 +186,25 @@ def attention_gru_layer(inputs,
     for i in range(stack_size):
       with tf.variable_scope('stack_' + str(i)):
         with tf.variable_scope('forward'):
-          dec_hidden = enc_hidden[0] # the 1th element is for forward
-          outputs_fw = attention_mechanism(enc_hidden[0], 
-                                            enc_output[0],
-                                            inputs_t,
-                                            labels_t,
-                                            num_units)
+          outputs_fw = attention_mechanism(enc_hidden[0], # the 1th element is for forward
+                                          enc_output[0],
+                                          inputs_t,
+                                          labels_t,
+                                          num_units,
+                                          batch_size)
         combined_outputs = outputs_fw
 
         if bidirectional:
           with tf.variable_scope('backward'):
             inputs_reversed = tf.reverse_sequence(inputs_t[-1], lengths, seq_axis=0, batch_axis=1)
             labels_reversed = tf.reverse_sequence(labels_t[-1], lengths, seq_axis=0, batch_axis=1)
-            outputs_bw = attention_mechanism(enc_hidden[1], 
+            outputs_bw = attention_mechanism(enc_hidden[1], # the 2th element is for backward
                                             enc_output[1],
                                             inputs_reversed,
                                             labels_reversed,
-                                            num_units)
-            outputs_bw = tf.reverse_sequence(outputs_bw, lengths, seq_axis=0, batch_axis=1)
+                                            num_units,
+                                            batch_size)
+            outputs_bw = tf.reverse_sequence(outputs_bw[-1], lengths, seq_axis=0, batch_axis=1)
 
           combined_outputs = tf.concat([outputs_fw, outputs_bw], axis=2)
 
@@ -295,18 +296,18 @@ def attention_model(inputs, hparams, lstm_units, lengths,
   else:
     return conv_output
 
-def encoder_prepare(lstm_units, batach_size, lables, bidirectional):
+def encoder_prepare(lstm_units, batch_size, lables, lengths, bidirectional):
   ''' prepare encoder for attention '''
   encoder_fw = attention.Encoder(lstm_units, batch_size)
   enc_hidden_fw = encoder_fw.initialize_hidden_state()
-  enc_output_fw, enc_hidden_fw = encoder_fw(labels, enc_hidden)
+  enc_output_fw, enc_hidden_fw = encoder_fw(labels, enc_hidden_fw)
   enc_output = [enc_output_fw]
   enc_hidden = [enc_hidden_fw]
   labels_reversed = tf.reverse_sequence(lables[-1], lengths, seq_axis=1, batch_axis=0)
   if bidirectional:
     encoder_bw = attention.Encoder(lstm_units, batch_size)
     enc_hidden_bw = encoder_bw.initialize_hidden_state()
-    enc_output_bw, enc_hidden_bw = encoder_bw(labels_reversed, onset_enc_hidden)
+    enc_output_bw, enc_hidden_bw = encoder_bw(labels_reversed, enc_hidden_bw)
 
     enc_output.append(enc_output_bw)
     enc_hidden.append(enc_hidden_bw)
@@ -339,6 +340,7 @@ def model_fn(features, labels, mode, params, config):
       enc_output, enc_hidden = encoder_prepare(hparams.onset_lstm_units, 
                                                 hparams.batch_size,
                                                 onset_labels,
+                                                length,
                                                 hparams.bidirectional)
       
       onset_outputs = attention_model(spec,
@@ -451,6 +453,7 @@ def model_fn(features, labels, mode, params, config):
         enc_output, enc_hidden = encoder_prepare(hparams.combined_lstm_units, 
                                                 hparams.batch_size,
                                                 frame_label_weights,
+                                                length,
                                                 hparams.bidirectional)
         outputs = attention_gru_layer(
             combined_probs,
