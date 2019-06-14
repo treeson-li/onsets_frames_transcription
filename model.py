@@ -157,8 +157,7 @@ def attention_mechanism(enc_hidden, enc_output, inputs, lengths, labels, num_uni
   outputs = []
   decoder = attention.Decoder(num_units, batch_size)
   # Teacher forcing - feeding the target as the next input
-  print("length shape and num:", lengths.shape, lengths[0], lengths[1], lengths[2])
-  for t in range(0, lengths):
+  for t in range(0, inputs.shape[0]):
     # using teacher forcing
     t1 = t-1 if t > 0 else 0
     dec_input = tf.concat([inputs[t], labels[t1]], axix=1)
