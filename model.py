@@ -152,7 +152,7 @@ def cudnn_lstm_layer(inputs,
 
     return outputs
 
-def attention_mechanism(enc_hidden, enc_output, inputs, lengths, labels, num_units, batch_size):
+def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch_size):
   dec_hidden = enc_hidden
   outputs = []
   t = 0
@@ -190,7 +190,6 @@ def attention_gru_layer(inputs,
           outputs_fw = attention_mechanism(enc_hidden[0], # the 1th element is for forward
                                           enc_output[0],
                                           inputs_t,
-                                          lengths,
                                           labels_t,
                                           num_units,
                                           batch_size)
@@ -203,10 +202,10 @@ def attention_gru_layer(inputs,
             outputs_bw = attention_mechanism(enc_hidden[1], # the 2th element is for backward
                                             enc_output[1],
                                             inputs_reversed,
-                                            lengths,
                                             labels_reversed,
                                             num_units,
                                             batch_size)
+            print("output_bw shape:", outputs_bw.shape)
             outputs_bw = tf.reverse_sequence(outputs_bw, lengths, seq_axis=0, batch_axis=1)
 
           combined_outputs = tf.concat([outputs_fw, outputs_bw], axis=2)
