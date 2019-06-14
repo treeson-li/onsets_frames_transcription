@@ -300,10 +300,12 @@ def encoder_prepare(lstm_units, batch_size, labels, lengths, bidirectional):
   ''' prepare encoder for attention '''
   encoder_fw = attention.Encoder(lstm_units, batch_size)
   enc_hidden_fw = encoder_fw.initialize_hidden_state()
+  print("shape of labels:", labels.shape)
   enc_output_fw, enc_hidden_fw = encoder_fw(labels, enc_hidden_fw)
   enc_output = [enc_output_fw]
   enc_hidden = [enc_hidden_fw]
   labels_reversed = tf.reverse_sequence(labels[-1], lengths, seq_axis=1, batch_axis=0)
+  print("shape of reverse labels:", labels_reversed.shape)
   if bidirectional:
     encoder_bw = attention.Encoder(lstm_units, batch_size)
     enc_hidden_bw = encoder_bw.initialize_hidden_state()
