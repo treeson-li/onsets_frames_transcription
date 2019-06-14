@@ -181,7 +181,6 @@ def attention_gru_layer(inputs,
   """Create a GRU layer that uses cudnn."""
   inputs_t = tf.transpose(inputs, [1, 0, 2])
   labels_t = tf.transpose(labels, [1, 0, 2])
-  all_outputs = [inputs_t]
   if lengths is not None:
     for i in range(stack_size):
       with tf.variable_scope('stack_' + str(i)):
@@ -196,24 +195,22 @@ def attention_gru_layer(inputs,
 
         if bidirectional:
           with tf.variable_scope('backward'):
-            inputs_reversed = tf.reverse_sequence(inputs_t[-1], lengths, seq_axis=0, batch_axis=1)
-            labels_reversed = tf.reverse_sequence(labels_t[-1], lengths, seq_axis=0, batch_axis=1)
+            inputs_reversed = tf.reverse_sequence(inputs_t, lengths, seq_axis=0, batch_axis=1)
+            labels_reversed = tf.reverse_sequence(labels_t, lengths, seq_axis=0, batch_axis=1)
             outputs_bw = attention_mechanism(enc_hidden[1], # the 2th element is for backward
                                             enc_output[1],
                                             inputs_reversed,
                                             labels_reversed,
                                             num_units,
                                             batch_size)
-            outputs_bw = tf.reverse_sequence(outputs_bw[-1], lengths, seq_axis=0, batch_axis=1)
+            outputs_bw = tf.reverse_sequence(outputs_bw, lengths, seq_axis=0, batch_axis=1)
 
           combined_outputs = tf.concat([outputs_fw, outputs_bw], axis=2)
-
-        all_outputs.append(combined_outputs)
 
     # for consistency with cudnn, here we just return the top of the stack,
     # although this can easily be altered to do other things, including be
     # more resnet like
-    return tf.transpose(all_outputs[-1], [1, 0, 2])
+    return tf.transpose(combined_outputs, [1, 0, 2])
   else:
     print("Error: No length in cudnn_gru_layer()")
     sys.exit(0)
@@ -304,7 +301,7 @@ def encoder_prepare(lstm_units, batch_size, labels, lengths, bidirectional):
   enc_output_fw, enc_hidden_fw = encoder_fw(labels, enc_hidden_fw)
   enc_output = [enc_output_fw]
   enc_hidden = [enc_hidden_fw]
-  labels_reversed = tf.reverse_sequence(labels[-1], lengths, seq_axis=1, batch_axis=0)
+  labels_reversed = tf.reverse_sequence(labels, lengths, seq_axis=1, batch_axis=0)
   print("shape of reverse labels:", labels_reversed.shape)
   if bidirectional:
     encoder_bw = attention.Encoder(lstm_units, batch_size)
