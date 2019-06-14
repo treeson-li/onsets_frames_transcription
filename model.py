@@ -161,7 +161,7 @@ def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch
   while t < inputs.shape[0]:
     # using teacher forcing
     t1 = t-1 if t > 0 else 0
-    dec_input = tf.concat([inputs[t], labels[t1]], axix=1)
+    dec_input = tf.concat([inputs[t], labels[t1]], axis=1)
     dec_input = tf.expand_dims(dec_input, 1)
     # passing enc_output to the decoder
     predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
@@ -207,6 +207,7 @@ def attention_gru_layer(inputs,
                                             num_units,
                                             batch_size)
             print("output_bw shape:", outputs_bw.shape)
+            print("inputs_reversed shape:", inputs_reversed.shape)
             outputs_bw = tf.reverse_sequence(outputs_bw, lengths, seq_axis=0, batch_axis=1)
 
           combined_outputs = tf.concat([outputs_fw, outputs_bw], axis=2)
