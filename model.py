@@ -160,7 +160,7 @@ def attention_mechanism(enc_hidden, enc_output, inputs, lengths, labels, num_uni
   for t in range(0, lengths):
     # using teacher forcing
     t1 = t-1 if t > 0 else 0
-    dec_input = tf.concat([inputs[t1], labels[t1]], axix=1)
+    dec_input = tf.concat([inputs[t], labels[t1]], axix=1)
     dec_input = tf.expand_dims(dec_input, 1)
     # passing enc_output to the decoder
     predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
