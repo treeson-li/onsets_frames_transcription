@@ -154,7 +154,6 @@ def cudnn_lstm_layer(inputs,
 
 def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch_size):
   dec_hidden = enc_hidden
-  outputs = []
   t = 0
   decoder = attention.Decoder(num_units, batch_size)
   # Teacher forcing - feeding the target as the next input
@@ -165,7 +164,8 @@ def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch
     dec_input = tf.expand_dims(dec_input, 1)
     # passing enc_output to the decoder
     predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
-    outputs.append(predictions)
+    print("shape of predictions: ", predictions.shape)
+    outputs = tf.concat([outputs, predictions], axis=0)
 
   return outputs
 
