@@ -20,6 +20,7 @@ from __future__ import print_function
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import functools
+import sys
 
 from magenta.common import flatten_maybe_padded_sequences
 from magenta.common import tf_utils
@@ -151,15 +152,15 @@ def cudnn_lstm_layer(inputs,
 
     return outputs
 
-def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch_size):
+def attention_mechanism(enc_hidden, enc_output, inputs, lengths, labels, num_units, batch_size):
   dec_hidden = enc_hidden
   outputs = []
   decoder = attention.Decoder(num_units, batch_size)
   # Teacher forcing - feeding the target as the next input
-  for t in range(0, labels.shape[0]):
+  for t in range(0, lengths):
     # using teacher forcing
     t1 = t-1 if t > 0 else 0
-    dec_input = tf.concat([inputs[t-1], labels[t-1]], axix=1)
+    dec_input = tf.concat([inputs[t1], labels[t1]], axix=1)
     dec_input = tf.expand_dims(dec_input, 1)
     # passing enc_output to the decoder
     predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
@@ -188,6 +189,7 @@ def attention_gru_layer(inputs,
           outputs_fw = attention_mechanism(enc_hidden[0], # the 1th element is for forward
                                           enc_output[0],
                                           inputs_t,
+                                          lengths,
                                           labels_t,
                                           num_units,
                                           batch_size)
@@ -200,6 +202,7 @@ def attention_gru_layer(inputs,
             outputs_bw = attention_mechanism(enc_hidden[1], # the 2th element is for backward
                                             enc_output[1],
                                             inputs_reversed,
+                                            lengths,
                                             labels_reversed,
                                             num_units,
                                             batch_size)
@@ -346,7 +349,7 @@ def model_fn(features, labels, mode, params, config):
                                       hparams,
                                       lstm_units=hparams.onset_lstm_units,
                                       lengths=length,
-                                      enc_ouput=enc_output,
+                                      enc_output=enc_output,
                                       enc_hidden=enc_hidden,
                                       labels=onset_labels,
                                       is_training=is_training)
@@ -591,7 +594,7 @@ def get_default_hparams():
       dropout_keep_amts=[1.0, 0.25, 0.25],
       fc_size=768,
       fc_dropout_keep_amt=0.5,
-      use_lengths=False,
+      use_lengths=True,
       use_cudnn=True,
       rnn_dropout_drop_amt=0.0,
       bidirectional=True,

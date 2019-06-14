@@ -72,7 +72,7 @@ class Decoder(tf.keras.Model):
         super(Decoder, self).__init__()
         self.batch_sz = batch_sz
         self.dec_units = dec_units
-        self.fc = tf.keras.layers.Dense(enc_units)
+        self.fc = tf.keras.layers.Dense(dec_units)
         self.gru = gru(self.dec_units)
 
         # used for attention
