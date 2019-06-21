@@ -41,34 +41,61 @@ class Encoder(tf.keras.Model):
         return tf.zeros((self.batch_sz, self.enc_units))
     
 class BahdanauAttention(tf.keras.Model):
-    def __init__(self, units):
+    def __init__(self, batch_sz, units, att_len):
         super(BahdanauAttention, self).__init__()
         self.W1 = tf.keras.layers.Dense(units)
         self.W2 = tf.keras.layers.Dense(units)
         self.V = tf.keras.layers.Dense(1)
+        self.pos = tf.zeros([batch_sz, 1], name='attention_pos')
+        self.att_len = int(att_len)
+        self.batch_sz = batch_sz
 
     def call(self, query, values):
+
+        def fetch_att_values(values, pos, batch_sz):
+            for i in range(batch_sz):
+                start = self.pos[i] - self.att_len/2
+                end = self.pos[i] + self.att_len/2
+                start = start if start > 0 else 0
+                end = end if end < tf.shape(values)[0] else tf.shape(values)[0]
+                values_slice = tf.slice(values, [start, i, 0], [end-start, 1, tf.shape(values)[2])
+                
+
+
+
         # hidden shape == (batch_size, hidden size)
         # hidden_with_time_axis shape == (batch_size, 1, hidden size)
         # we are doing this to perform addition to calculate the score
         hidden_with_time_axis = tf.expand_dims(query, 1)
 
+        #calc attention range
+        start = self.pos - self.att_len/2
+        end = self.pos + self.att_len/2
+        start = start if start > 0 else 0
+        end = end if end < tf.shape(values)[0] else tf.shape(values)[0]
+        values_att = values[start:end]
+        values_att = fetch_att_values(values, self.pos, self.batch_sz)
+
         # score shape == (batch_size, max_length, hidden_size)
         score = self.V(tf.nn.tanh(
-            self.W1(values) + self.W2(hidden_with_time_axis)))
+            self.W1(values_att) + self.W2(hidden_with_time_axis)))
 
         # attention_weights shape == (batch_size, max_length, 1)
         # we get 1 at the last axis because we are applying score to self.V
         attention_weights = tf.nn.softmax(score, axis=1)
 
         # context_vector shape after sum == (batch_size, hidden_size)
-        context_vector = attention_weights * values
+        context_vector = attention_weights * values_att
         context_vector = tf.reduce_sum(context_vector, axis=1)
+
+        #update attention position
+        xpos = range(start, end)
+        self.pos = int(tf.reduce_sum(tf.multiply(xpos, attention_weights)))
 
         return context_vector, attention_weights
 
 class Decoder(tf.keras.Model):
-    def __init__(self, dec_units, batch_sz):
+    def __init__(self, dec_units, batch_sz, att_len):
         super(Decoder, self).__init__()
         self.batch_sz = batch_sz
         self.dec_units = dec_units
@@ -76,7 +103,7 @@ class Decoder(tf.keras.Model):
         self.gru = gru(self.dec_units)
 
         # used for attention
-        self.attention = BahdanauAttention(self.dec_units)
+        self.attention = BahdanauAttention(self.dec_units, att_len)
 
     def call(self, x, hidden, enc_output):
         # enc_output shape == (batch_size, max_length, hidden_size)

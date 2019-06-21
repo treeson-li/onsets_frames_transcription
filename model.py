@@ -25,6 +25,8 @@ import sys
 from magenta.common import flatten_maybe_padded_sequences
 from magenta.common import tf_utils
 import constants
+import copy
+import configs
 
 import attention
 
@@ -152,13 +154,48 @@ def cudnn_lstm_layer(inputs,
 
     return outputs
 
+def attention_method(enc_hidden, enc_output, inputs, labels, num_units, batch_size):
+  
+  def condition(t, outputs, dec_hidden):
+    return tf.less(t, tf.shape(inputs)[0])
+
+  def body(t, outputs, dec_hidden):
+    if t == 0:
+      dec_input = tf.concat([inputs[t], labels[t]], axis=1)
+    else:
+      dec_input = tf.concat([inputs[t], labels[t-1]], axis=1)
+    dec_input = tf.expand_dims(dec_input, 1)
+    predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
+    predictions = tf.expand_dims(predictions, 0)
+    if t == 0:
+      outputs = predictions
+    else:
+      outputs = tf.concat([outputs, predictions], axis=0)
+    t = tf.add(t, 1)
+    return t, outputs, dec_hidden
+
+  with tf.variable_scope('attention_method'):
+    hparams = copy.deepcopy(configs.DEFAULT_HPARAMS)
+    att_frames = tf.div(hparams.attention_ms, hparams.onset_length)
+    t = tf.Variable(tf.constant(0), name='decoder_t')
+    dec_hidden = enc_hidden
+    outputs = tf.zeros([1, batch_size, num_units])
+    decoder = attention.Decoder(num_units, batch_size, att_frames)
+    t, outputs, _ = tf.while_loop(condition, body, loop_vars=[t, outputs, dec_hidden], 
+                                              shape_invariants=[t.get_shape(), tf.TensorShape([None, batch_size, num_units]), dec_hidden.get_shape()])
+
+  return outputs
+
+
 def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch_size):
   dec_hidden = enc_hidden
   t = 0
   outputs = tf.zeros([1, batch_size, num_units])
   decoder = attention.Decoder(num_units, batch_size)
+  print("input data length: ", tf.shape(inputs))
   # Teacher forcing - feeding the target as the next input
   while t < inputs.shape[0]:
+#  for t in range(tf.shape(inputs)[0]):
     # using teacher forcing
     t1 = t-1 if t > 0 else 0
     dec_input = tf.concat([inputs[t], labels[t1]], axis=1)
@@ -167,8 +204,10 @@ def attention_mechanism(enc_hidden, enc_output, inputs, labels, num_units, batch
     predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
     predictions = tf.expand_dims(predictions, 0)
     outputs = tf.concat([outputs, predictions], axis=0)
+    t = t+1
 
-  return outputs
+  print("shape of attention outputs:", outputs.shape)
+  return outputs[1:]
 
 def attention_gru_layer(inputs,
                      batch_size,
@@ -188,7 +227,7 @@ def attention_gru_layer(inputs,
     for i in range(stack_size):
       with tf.variable_scope('stack_' + str(i)):
         with tf.variable_scope('forward'):
-          outputs_fw = attention_mechanism(enc_hidden[0], # the 1th element is for forward
+          outputs_fw = attention_method(enc_hidden[0], # the 1th element is for forward
                                           enc_output[0],
                                           inputs_t,
                                           labels_t,
@@ -200,7 +239,7 @@ def attention_gru_layer(inputs,
           with tf.variable_scope('backward'):
             inputs_reversed = tf.reverse_sequence(inputs_t, lengths, seq_axis=0, batch_axis=1)
             labels_reversed = tf.reverse_sequence(labels_t, lengths, seq_axis=0, batch_axis=1)
-            outputs_bw = attention_mechanism(enc_hidden[1], # the 2th element is for backward
+            outputs_bw = attention_method(enc_hidden[1], # the 2th element is for backward
                                             enc_output[1],
                                             inputs_reversed,
                                             labels_reversed,
@@ -325,6 +364,8 @@ def model_fn(features, labels, mode, params, config):
 
   length = features.length
   spec = features.spec
+  print("shape of spec:", spec.shape)
+  print("shape of length:", length.shape)
 
   is_training = mode == tf.estimator.ModeKeys.TRAIN
 
@@ -570,7 +611,7 @@ def get_default_hparams():
     hyperparameters for the model.
   """
   return tf.contrib.training.HParams(
-      batch_size=8,
+      batch_size=4,
       learning_rate=0.0006,
       decay_steps=10000,
       decay_rate=0.98,
