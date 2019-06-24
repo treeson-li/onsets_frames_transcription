@@ -102,7 +102,7 @@ class BahdanauAttention(tf.keras.Model):
         hidden_with_time_axis = tf.expand_dims(query, 1)
 
         # slice attention values from enc_output(values), xpos is the time index
-        values_att, xpos = fetch_att_values(values, self.pos, self.batch_sz)
+        values_att, xpos = self.fetch_att_values(values, self.pos, self.batch_sz)
 
         # score shape == (batch_size, max_length, hidden_size)
         score = self.V(tf.nn.tanh(
