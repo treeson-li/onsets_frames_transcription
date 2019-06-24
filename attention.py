@@ -46,7 +46,7 @@ class BahdanauAttention(tf.keras.Model):
         self.W1 = tf.keras.layers.Dense(units)
         self.W2 = tf.keras.layers.Dense(units)
         self.V = tf.keras.layers.Dense(1)
-        self.pos = tf.zeros([batch_sz, 1], dtype=int32, name='attention_pos')
+        self.pos = tf.zeros([batch_sz, 1], dtype=tf.int32, name='attention_pos')
         self.att_len = int(att_len)
         self.batch_sz = batch_sz
 
@@ -67,7 +67,7 @@ class BahdanauAttention(tf.keras.Model):
             xlen = tf.subtract(end - start)
 
             # slice the enc_output around of self.pos
-            values_slice = tf.slice(values, [start, i, 0], [xlen, 1, tf.shape(values)[2])
+            values_slice = tf.slice(values, [start, i, 0], [xlen, 1, tf.shape(values)[2]])
             padding = lambda: tf.concat(values_slice, tf.zeros([self.att_len-xlen, 1, tf.shape(values[0])]), axis=0)
             # padding zeros if the length less than att_len
             values_slice = tf.cond(tf.equal(xlen, self.att_len), 
@@ -90,7 +90,7 @@ class BahdanauAttention(tf.keras.Model):
             i = tf.add(i, 1)
             return  i, att_value, xpos
 
-        i = tf.Variable(tf.constants(0), dtype=int32)
+        i = tf.Variable(tf.constants(0), dtype=tf.int32)
         _, att_value, xpos = tf.while_loop(cond, body, loop_vars=[i, att_value, xpos])
 
         return  att_value, xpos
@@ -117,7 +117,7 @@ class BahdanauAttention(tf.keras.Model):
         context_vector = tf.reduce_sum(context_vector, axis=1)
 
         #update attention center position
-        self.pos = tf.cast(tf.reduce_sum(tf.multiply(xpos, attention_weights), axis=1), dtype=int32)
+        self.pos = tf.cast(tf.reduce_sum(tf.multiply(xpos, attention_weights), axis=1), dtype=tf.int32)
 
         return context_vector, attention_weights
 
