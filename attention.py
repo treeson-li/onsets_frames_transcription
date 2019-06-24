@@ -93,8 +93,10 @@ class BahdanauAttention(tf.keras.Model):
 
         zero = lambda: tf.constant(0, dtype=tf.int32)
         zeros= lambda: tf.zeros([self.att_len, 1, self.units], dtype=tf.float32)
+        zeros2= lambda: tf.zeros([self.batch_sz], dtype=tf.float32)
         i = tf.Variable(initial_value=zero, dtype=tf.int32)
         att_value = tf.Variable(initial_value=zeros, dtype=tf.float32)
+        xpos = tf.Variable(initial_value=zeros2, dtype=tf.float32)
         _, att_value, xpos = tf.while_loop(cond, body, loop_vars=[i, att_value, xpos])
 
         return  att_value, xpos
