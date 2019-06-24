@@ -167,7 +167,7 @@ def attention_method(enc_hidden, enc_output, inputs, labels, num_units, batch_si
     predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
     predictions = tf.expand_dims(predictions, 0)
     outputs = tf.cond(tf.equal(t, 0),
-                      lambda: predictions,
+                      lambda: tf.identity(predictions),
                       lambda: tf.concat([outputs, predictions], axis=0))
     t = tf.add(t, 1)
     return t, outputs, dec_hidden
@@ -178,9 +178,10 @@ def attention_method(enc_hidden, enc_output, inputs, labels, num_units, batch_si
     t = tf.Variable(tf.constant(0), dtype=tf.int32, name='decoder_t')
     dec_hidden = enc_hidden
     decoder = attention.Decoder(num_units, batch_size, att_frames)
-    outputs = tf.get_variable("decoder_output", dtype=tf.float32)
+    outputs = tf.zeros([1, batch_size, num_units])
     t, outputs, _ = tf.while_loop(condition, body, loop_vars=[t, outputs, dec_hidden], 
                                   shape_invariants=[t.get_shape(), tf.TensorShape([None, batch_size, num_units]), dec_hidden.get_shape()])
+  #  outputs = tf.slice(outputs, [1, 0, 0], [tf.shape(outputs)[0]-1, batch_size, num_units])
 
   return outputs
 
