@@ -55,7 +55,7 @@ class BahdanauAttention(tf.keras.Model):
         def cond(i, att_value, xpos):
             return tf.less(i, batch_sz)
 
-        def body(i, att_value):
+        def body(i, att_value, xpos):
             # take self.pos as the center, and att_len as the range 
             start = tf.subtract(pos[i], self.att_len/2)
             end = tf.add(pos[i], self.att_len/2)
