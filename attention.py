@@ -46,35 +46,63 @@ class BahdanauAttention(tf.keras.Model):
         self.W1 = tf.keras.layers.Dense(units)
         self.W2 = tf.keras.layers.Dense(units)
         self.V = tf.keras.layers.Dense(1)
-        self.pos = tf.zeros([batch_sz, 1], name='attention_pos')
+        self.pos = tf.zeros([batch_sz, 1], dtype=int32, name='attention_pos')
         self.att_len = int(att_len)
         self.batch_sz = batch_sz
 
+    def fetch_att_values(self, values, pos, batch_sz):
+        def cond(i, att_value, xpos):
+            return tf.less(i, batch_sz)
+
+        def body(i, att_value):
+            # take self.pos as the center, and att_len as the range 
+            start = tf.subtract(pos[i], self.att_len/2)
+            end = tf.add(pos[i], self.att_len/2)
+            start = tf.cond(tf.greater(start, 0), 
+                            lambda: start, 
+                            lambda: 0)
+            end = tf.cond(tf.less(end, tf.shape(values)[0]), 
+                            lambda: end, 
+                            lambda: tf.shape(values0[0]))
+            xlen = tf.subtract(end - start)
+
+            # slice the enc_output around of self.pos
+            values_slice = tf.slice(values, [start, i, 0], [xlen, 1, tf.shape(values)[2])
+            padding = lambda: tf.concat(values_slice, tf.zeros([self.att_len-xlen, 1, tf.shape(values[0])]), axis=0)
+            # padding zeros if the length less than att_len
+            values_slice = tf.cond(tf.equal(xlen, self.att_len), 
+                                    lambda: values_slice, 
+                                    padding)
+            # concat the attention values
+            att_value = tf.cond(tf.equal(i, 0), 
+                                lambda: values_slice, 
+                                lambda: tf.concat(att_value, values_slice, axis=1))
+            
+            # get x asix numbers from start to end
+            xranges = tf.range(start, end)
+            xranges = tf.cond(tf.equal(xlen, self.att_len), 
+                                lambda: xranges,
+                                lambda: tf.concat(xranges, tf.zeros(self.att_len-xlen)))
+            xranges = tf.expand_dims(xranges, 0)
+            xpos = tf.cond(tf.equal(i, 0),
+                            lambda: xranges,
+                            lambda: tf.concat(xpos, xranges, axis=0))
+            i = tf.add(i, 1)
+            return  i, att_value, xpos
+
+        i = tf.Variable(tf.constants(0), dtype=int32)
+        _, att_value, xpos = tf.while_loop(cond, body, loop_vars=[i, att_value, xpos])
+
+        return  att_value, xpos
+
     def call(self, query, values):
-
-        def fetch_att_values(values, pos, batch_sz):
-            for i in range(batch_sz):
-                start = self.pos[i] - self.att_len/2
-                end = self.pos[i] + self.att_len/2
-                start = start if start > 0 else 0
-                end = end if end < tf.shape(values)[0] else tf.shape(values)[0]
-                values_slice = tf.slice(values, [start, i, 0], [end-start, 1, tf.shape(values)[2])
-                
-
-
-
         # hidden shape == (batch_size, hidden size)
         # hidden_with_time_axis shape == (batch_size, 1, hidden size)
         # we are doing this to perform addition to calculate the score
         hidden_with_time_axis = tf.expand_dims(query, 1)
 
-        #calc attention range
-        start = self.pos - self.att_len/2
-        end = self.pos + self.att_len/2
-        start = start if start > 0 else 0
-        end = end if end < tf.shape(values)[0] else tf.shape(values)[0]
-        values_att = values[start:end]
-        values_att = fetch_att_values(values, self.pos, self.batch_sz)
+        # slice attention values from enc_output(values), xpos is the time index
+        values_att, xpos = fetch_att_values(values, self.pos, self.batch_sz)
 
         # score shape == (batch_size, max_length, hidden_size)
         score = self.V(tf.nn.tanh(
@@ -88,9 +116,8 @@ class BahdanauAttention(tf.keras.Model):
         context_vector = attention_weights * values_att
         context_vector = tf.reduce_sum(context_vector, axis=1)
 
-        #update attention position
-        xpos = range(start, end)
-        self.pos = int(tf.reduce_sum(tf.multiply(xpos, attention_weights)))
+        #update attention center position
+        self.pos = tf.cast(tf.reduce_sum(tf.multiply(xpos, attention_weights), axis=1), dtype=int32)
 
         return context_vector, attention_weights
 

@@ -47,7 +47,7 @@ DEFAULT_HPARAMS = tf_utils.merge_hparams(
         min_frame_occupancy_for_label=0.0,
         jitter_amount_ms=0,
         min_duration_ms=0,
-        attention_ms=3000,
+        attention_ms=2000,
         backward_shift_amount_ms=0))
 
 CONFIG_MAP = {}

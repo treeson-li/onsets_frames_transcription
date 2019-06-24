@@ -160,26 +160,23 @@ def attention_method(enc_hidden, enc_output, inputs, labels, num_units, batch_si
     return tf.less(t, tf.shape(inputs)[0])
 
   def body(t, outputs, dec_hidden):
-    if t == 0:
-      dec_input = tf.concat([inputs[t], labels[t]], axis=1)
-    else:
-      dec_input = tf.concat([inputs[t], labels[t-1]], axis=1)
+    dec_input = tf.cond(tf.equal(t, 0), 
+                        lambda: tf.concat([inputs[t], labels[t]], axis=1),
+                        lambda: tf.concat([inputs[t], labels[t-1]], axis=1))
     dec_input = tf.expand_dims(dec_input, 1)
     predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
     predictions = tf.expand_dims(predictions, 0)
-    if t == 0:
-      outputs = predictions
-    else:
-      outputs = tf.concat([outputs, predictions], axis=0)
+    outputs = tf.cond(tf.equal(t, 0),
+                      lambda: predictions,
+                      lambda: tf.concat([outputs, predictions], axis=0))
     t = tf.add(t, 1)
     return t, outputs, dec_hidden
 
   with tf.variable_scope('attention_method'):
     hparams = copy.deepcopy(configs.DEFAULT_HPARAMS)
     att_frames = tf.div(hparams.attention_ms, hparams.onset_length)
-    t = tf.Variable(tf.constant(0), name='decoder_t')
+    t = tf.Variable(tf.constant(0), dtype=int32, name='decoder_t')
     dec_hidden = enc_hidden
-    outputs = tf.zeros([1, batch_size, num_units])
     decoder = attention.Decoder(num_units, batch_size, att_frames)
     t, outputs, _ = tf.while_loop(condition, body, loop_vars=[t, outputs, dec_hidden], 
                                               shape_invariants=[t.get_shape(), tf.TensorShape([None, batch_size, num_units]), dec_hidden.get_shape()])
