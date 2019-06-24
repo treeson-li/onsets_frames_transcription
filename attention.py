@@ -130,7 +130,7 @@ class Decoder(tf.keras.Model):
         self.gru = gru(self.dec_units)
 
         # used for attention
-        self.attention = BahdanauAttention(self.dec_units, att_len)
+        self.attention = BahdanauAttention(batch_sz=batch_sz, units=self.dec_units, att_len=att_len)
 
     def call(self, x, hidden, enc_output):
         # enc_output shape == (batch_size, max_length, hidden_size)
