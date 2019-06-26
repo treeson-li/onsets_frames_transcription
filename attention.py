@@ -59,7 +59,6 @@ class BahdanauAttention(tf.keras.Model):
             # take self.pos as the center, and att_len as the range 
             start = tf.subtract(pos[i], tf.div(self.att_len, 2))
             end = tf.add(pos[i], tf.div(self.att_len, 2))
-            print("shape of start:", start.shape, tf.shape(start))
             start = tf.cond(tf.greater(start, 0), 
                             lambda: start, 
                             lambda: 0)
@@ -84,7 +83,7 @@ class BahdanauAttention(tf.keras.Model):
             xranges = tf.range(start, end)
             xranges = tf.cond(tf.equal(xlen, self.att_len), 
                                 lambda: xranges,
-                                lambda: tf.concat([xranges, tf.zeros([self.att_len-xlen])], axis=0))
+                                lambda: tf.concat([xranges, tf.zeros([self.att_len-xlen], dtype=tf.int32)], axis=0))
             xranges = tf.expand_dims(xranges, 0)
             xpos = tf.cond(tf.equal(i, 0),
                             lambda: tf.identity(xranges),
