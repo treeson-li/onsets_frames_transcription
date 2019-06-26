@@ -46,7 +46,7 @@ class BahdanauAttention(tf.keras.Model):
         self.W1 = tf.keras.layers.Dense(units)
         self.W2 = tf.keras.layers.Dense(units)
         self.V = tf.keras.layers.Dense(1)
-        self.pos = tf.zeros([batch_sz, 1], dtype=tf.int32, name='attention_pos')
+        self.pos = tf.zeros([batch_sz], dtype=tf.int32, name='attention_pos')
         self.att_len = tf.cast(att_len, dtype=tf.int32)
         self.batch_sz = batch_sz
         self.units = units
@@ -62,7 +62,7 @@ class BahdanauAttention(tf.keras.Model):
             print("shape of start:", start.shape, tf.shape(start))
             start = tf.cond(tf.greater(start, 0), 
                             lambda: start, 
-                            lambda: tf.constant(0))
+                            lambda: 0)
             end = tf.cond(tf.less(end, tf.shape(values)[0]), 
                             lambda: end, 
                             lambda: tf.shape(values0[0]))
