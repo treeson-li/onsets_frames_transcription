@@ -68,8 +68,9 @@ class BahdanauAttention(tf.keras.Model):
             xlen = tf.subtract(end, start)
 
             # slice the enc_output around of self.pos
-            values_slice = tf.slice(values, [start, i, 0], [xlen, 1, units_num])
-            padding = lambda: tf.concat([values_slice, tf.zeros([self.att_len-xlen, 1, units_num]) ], axis=0)
+            # enc_output shape == (batch_size, max_length, hidden_size)
+            values_slice = tf.slice(values, [i, start, 0], [1, xlen, units_num])
+            padding = lambda: tf.concat([values_slice, tf.zeros([1, self.att_len-xlen, units_num]) ], axis=1)
             # padding zeros if the length less than att_len
             values_slice = tf.cond(tf.equal(xlen, self.att_len), 
                                     lambda: values_slice, 
@@ -77,7 +78,7 @@ class BahdanauAttention(tf.keras.Model):
             # concat the attention values along batch dim
             att_value = tf.cond(tf.equal(i, 0), 
                                 lambda: tf.identity(values_slice), 
-                                lambda: tf.concat([att_value, values_slice], axis=1))
+                                lambda: tf.concat([att_value, values_slice], axis=0))
             
             # get x asix numbers from start to end
             xranges = tf.cast(tf.range(start, end), dtype=tf.float32)
@@ -98,7 +99,8 @@ class BahdanauAttention(tf.keras.Model):
         i = tf.Variable(initial_value=zero, dtype=tf.int32)
         att_value = tf.Variable(initial_value=zeros, dtype=tf.float32)
         xpos = tf.Variable(initial_value=zeros2, dtype=tf.float32)
-        _, att_value, xpos = tf.while_loop(cond, body, loop_vars=[i, att_value, xpos])
+        _, att_value, xpos = tf.while_loop(cond, body, loop_vars=[i, att_value, xpos], 
+                            shape_invariants=[0, tf.TensorShape([None, self.att_len, self.units]), tf.TensorShape([None, self.att_len])])
 
         return  att_value, xpos
 
@@ -119,11 +121,13 @@ class BahdanauAttention(tf.keras.Model):
         # we get 1 at the last axis because we are applying score to self.V
         attention_weights = tf.nn.softmax(score, axis=1)
 
+        # enc_output shape == (batch_size, max_length, hidden_size)
         # context_vector shape after sum == (batch_size, hidden_size)
-        context_vector = attention_weights * values_att
+        context_vector = tf.multiply(attention_weights, values_att)
         context_vector = tf.reduce_sum(context_vector, axis=1)
 
-        #update attention center position
+        # update attention center position
+        # xpos shape == (batch_size, max_length)
         self.pos = tf.cast(tf.reduce_sum(tf.multiply(xpos, attention_weights), axis=1), dtype=tf.int32)
 
         return context_vector, attention_weights
