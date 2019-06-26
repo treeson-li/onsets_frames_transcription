@@ -65,7 +65,7 @@ class BahdanauAttention(tf.keras.Model):
                             lambda: 0)
             end = tf.cond(tf.less(end, tf.shape(values)[0]), 
                             lambda: end, 
-                            lambda: tf.shape(values0[0]))
+                            lambda: tf.shape(values)[0])
             xlen = tf.subtract(end - start)
 
             # slice the enc_output around of self.pos
