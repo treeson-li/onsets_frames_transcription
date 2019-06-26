@@ -80,11 +80,12 @@ class BahdanauAttention(tf.keras.Model):
                                 lambda: tf.concat([att_value, values_slice], axis=1))
             
             # get x asix numbers from start to end
-            xranges = tf.range(start, end)
+            xranges = tf.range(start, end, dtype=tf.float32)
             xranges = tf.cond(tf.equal(xlen, self.att_len), 
                                 lambda: xranges,
-                                lambda: tf.concat([xranges, tf.zeros([self.att_len-xlen], dtype=tf.int32)], axis=0))
-            xranges = tf.expand_dims(xranges, 0)
+                                lambda: tf.concat([xranges, tf.zeros([self.att_len-xlen], dtype=tf.float32)], axis=0))
+            xranges = tf.expand_dims(xranges, 0) # add batch dim
+            # concat along batch dim
             xpos = tf.cond(tf.equal(i, 0),
                             lambda: tf.identity(xranges),
                             lambda: tf.concat([xpos, xranges], axis=0))
