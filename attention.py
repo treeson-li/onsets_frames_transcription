@@ -70,7 +70,7 @@ class BahdanauAttention(tf.keras.Model):
 
             # slice the enc_output around of self.pos
             values_slice = tf.slice(values, [start, i, 0], [xlen, 1, tf.shape(values)[2]])
-            padding = lambda: tf.concat(values_slice, tf.zeros([self.att_len-xlen, 1, tf.shape(values[0])]), axis=0)
+            padding = lambda: tf.concat([values_slice, tf.zeros([self.att_len-xlen, 1, tf.shape(values[0])])], axis=0)
             # padding zeros if the length less than att_len
             values_slice = tf.cond(tf.equal(xlen, self.att_len), 
                                     lambda: values_slice, 
@@ -78,17 +78,17 @@ class BahdanauAttention(tf.keras.Model):
             # concat the attention values
             att_value = tf.cond(tf.equal(i, 0), 
                                 lambda: tf.identity(values_slice), 
-                                lambda: tf.concat(att_value, values_slice, axis=1))
+                                lambda: tf.concat([att_value, values_slice], axis=1))
             
             # get x asix numbers from start to end
             xranges = tf.range(start, end)
             xranges = tf.cond(tf.equal(xlen, self.att_len), 
                                 lambda: xranges,
-                                lambda: tf.concat(xranges, tf.zeros(self.att_len-xlen)))
+                                lambda: tf.concat([xranges, tf.zeros(self.att_len-xlen)])
             xranges = tf.expand_dims(xranges, 0)
             xpos = tf.cond(tf.equal(i, 0),
                             lambda: tf.identity(xranges),
-                            lambda: tf.concat(xpos, xranges, axis=0))
+                            lambda: tf.concat([xpos, xranges], axis=0))
             i = tf.add(i, 1)
             return  i, att_value, xpos
 
