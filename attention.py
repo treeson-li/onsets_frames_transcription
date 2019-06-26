@@ -84,7 +84,7 @@ class BahdanauAttention(tf.keras.Model):
             xranges = tf.range(start, end)
             xranges = tf.cond(tf.equal(xlen, self.att_len), 
                                 lambda: xranges,
-                                lambda: tf.concat([xranges, tf.zeros([self.att_len-xlen]), axis=0)
+                                lambda: tf.concat([xranges, tf.zeros([self.att_len-xlen])], axis=0))
             xranges = tf.expand_dims(xranges, 0)
             xpos = tf.cond(tf.equal(i, 0),
                             lambda: tf.identity(xranges),
