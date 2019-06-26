@@ -75,7 +75,7 @@ class BahdanauAttention(tf.keras.Model):
             values_slice = tf.cond(tf.equal(xlen, self.att_len), 
                                     lambda: values_slice, 
                                     padding)
-            # concat the attention values
+            # concat the attention values along batch dim
             att_value = tf.cond(tf.equal(i, 0), 
                                 lambda: tf.identity(values_slice), 
                                 lambda: tf.concat([att_value, values_slice], axis=1))
@@ -84,7 +84,7 @@ class BahdanauAttention(tf.keras.Model):
             xranges = tf.range(start, end)
             xranges = tf.cond(tf.equal(xlen, self.att_len), 
                                 lambda: xranges,
-                                lambda: tf.concat([xranges, tf.zeros(self.att_len-xlen)]))
+                                lambda: tf.concat([xranges, tf.zeros([self.att_len-xlen]), axis=0)
             xranges = tf.expand_dims(xranges, 0)
             xpos = tf.cond(tf.equal(i, 0),
                             lambda: tf.identity(xranges),
