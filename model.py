@@ -174,7 +174,7 @@ def attention_method(enc_hidden, enc_output, inputs, labels, num_units, batch_si
 
   with tf.variable_scope('attention_method'):
     hparams = copy.deepcopy(configs.DEFAULT_HPARAMS)
-    att_frames = hparams.attention_ms/hparams.onset_length
+    att_frames = int(hparams.attention_ms/hparams.onset_length)
     t = tf.Variable(tf.constant(0), dtype=tf.int32, name='decoder_t')
     dec_hidden = enc_hidden
     decoder = attention.Decoder(num_units, batch_size, att_frames)
