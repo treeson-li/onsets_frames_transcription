@@ -128,7 +128,7 @@ class BahdanauAttention(tf.keras.Model):
 
         # update attention center position
         # xpos shape == (batch_size, max_length)
-        self.pos = tf.cast(tf.reduce_sum(tf.multiply(xpos, attention_weights), axis=1), dtype=tf.int32)
+        self.pos = tf.cast(tf.reduce_sum(tf.multiply(attention_weights， xpos), axis=1), dtype=tf.int32)
 
         return context_vector, attention_weights
 
