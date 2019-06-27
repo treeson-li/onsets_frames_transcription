@@ -51,7 +51,7 @@ class BahdanauAttention(tf.keras.Model):
         self.batch_sz = batch_sz
         self.units = units
 
-    def fetch_att_values(self, values, pos, batch_sz, units_num):
+    def fetch_att_values(self, values, att_len, pos, batch_sz, units_num):
         def cond(i, att_value, xpos):
             return tf.less(i, batch_sz)
 
@@ -100,7 +100,7 @@ class BahdanauAttention(tf.keras.Model):
         att_value = tf.Variable(initial_value=zeros, dtype=tf.float32)
         xpos = tf.Variable(initial_value=zeros2, dtype=tf.float32)
         _, att_value, xpos = tf.while_loop(cond, body, loop_vars=[i, att_value, xpos], 
-                            shape_invariants=[i.get_shape(), tf.TensorShape([None, self.att_len, self.units]), tf.TensorShape([None, self.att_len])])
+                            shape_invariants=[i.get_shape(), tf.TensorShape([None, att_len, units_num]), tf.TensorShape([None, att_len])])
 
         return  att_value, xpos
 
@@ -111,7 +111,7 @@ class BahdanauAttention(tf.keras.Model):
         hidden_with_time_axis = tf.expand_dims(query, 1)
 
         # slice attention values from enc_output(values), xpos is the time index
-        values_att, xpos = self.fetch_att_values(values, self.pos, self.batch_sz, self.units)
+        values_att, xpos = self.fetch_att_values(values, self.att_len, self.pos, self.batch_sz, self.units)
 
         # score shape == (batch_size, max_length, hidden_size)
         score = self.V(tf.nn.tanh(
