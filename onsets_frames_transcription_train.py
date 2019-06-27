@@ -59,7 +59,7 @@ tf.app.flags.DEFINE_boolean('use_tpu', False,
 tf.app.flags.DEFINE_enum('mode', 'train', ['train', 'eval'],
                          'Which mode to use.')
 tf.app.flags.DEFINE_string(
-    'log', 'WARN',
+    'log', 'ERROR',
     'The threshold for what messages will be logged: '
     'DEBUG, INFO, WARN, ERROR, or FATAL.')
 
