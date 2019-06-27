@@ -180,7 +180,7 @@ def attention_method(enc_hidden, enc_output, inputs, labels, num_units, batch_si
     decoder = attention.Decoder(num_units, batch_size, att_frames)
     outputs = tf.zeros([1, batch_size, num_units])
     t, outputs, _ = tf.while_loop(condition, body, loop_vars=[t, outputs, dec_hidden], 
-                    shape_invariants=[t.get_shape(), tf.TensorShape([None, None, num_units]), dec_hidden.get_shape()])
+        shape_invariants=[t.get_shape(), tf.TensorShape([None, None, num_units]), tf.TensorShape([None, num_units])])
   #  outputs = tf.slice(outputs, [1, 0, 0], [tf.shape(outputs)[0]-1, batch_size, num_units])
 
   return outputs
