@@ -49,7 +49,7 @@ class BahdanauAttention(tf.keras.Model):
         self.pos = tf.zeros([batch_sz], dtype=tf.int32, name='attention_pos')
         self.att_len = tf.cast(att_len, dtype=tf.int32)
         self.batch_sz = batch_sz
-        self.units = units
+        self.units = tf.cast(units, dtype=tf.int32)
 
     def fetch_att_values(self, values, pos, batch_sz, units_num):
         def cond(i, att_value, xpos):
