@@ -100,7 +100,7 @@ class BahdanauAttention(tf.keras.Model):
         att_value = tf.Variable(initial_value=zerosVal, dtype=tf.float32)
         xpos = tf.Variable(initial_value=zerosXpos, dtype=tf.float32)
         _, att_value, xpos = tf.while_loop(cond, body, loop_vars=[i, att_value, xpos], 
-            shape_invariants=[i.get_shape(), tf.TensorShape([None, None, self.units]), tf.TensorShape([None, self.att_len])])
+            shape_invariants=[i.get_shape(), tf.TensorShape([None, None, self.units]), tf.TensorShape([None, None])])
 
         return  att_value, xpos
 
