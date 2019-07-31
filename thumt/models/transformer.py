@@ -183,26 +183,30 @@ def transformer_decoder(inputs, memory, bias, mem_bias, params, pos=None, dtype=
         return outputs, decoding_outputs
 
 def AvgAttentionNet(inputs, params, pos=None, dtype=None, scope=None, is_training=True):
-    with tf.variable_scope(scope, default_name="decoder", dtype=dtype, is_training=is_training,
-                           values=[inputs] + pos):
+    with tf.variable_scope(scope, default_name="decoder", dtype=dtype,
+                           values=[inputs, pos]):
         x = inputs
-        normn = params.avg_len
-        pos = tf.where(tf.less(pos < normn), pos, normn)
+        normn = tf.cast(params.avg_len, tf.float32)
+        normTensor = tf.fill(tf.shape(pos), normn)
+        pos = tf.where(tf.less(pos, normn), pos, normTensor)
         for layer in range(params.num_decoder_layers):
             with tf.variable_scope("layer_%d" % layer):
                 # The Average Attention Network
                 with tf.variable_scope("position_forward"):
                     # Cumulative Summing                    
                     x_cum = tf.cumsum(x, axis=1)
-                    x_cum_shift = tf.pad(x_cum, [[0, 0], [normn, 0], [0, 0]])[:, :-normn, :]                    
-                    x_fwd = tf.subtract(x_cum, x_cum_shift) / pos[0]
+                    x_cum_shift = tf.pad(x_cum, [[0, 0], [normn, 0], [0, 0]])
+                    x_cum_shift = tf.slice(x_cum_shift, [0, 0, 0], [-1, tf.shape(x)[1], -1])
+                    x_fwd = tf.subtract(x_cum, x_cum_shift)
+                    x_fwd = tf.divide(x_fwd, pos)
                     # FFN activation
                     if params.use_ffn:
                         y = ffn_layer(
                             layer_process(x_fwd, params.layer_preprocess),
                             params.ffn_filter_size,
                             params.aan_size,
-                            1.0 - params.relu_dropout
+                            1.0 - params.relu_dropout,
+                            is_training=is_training
                         )
                     else:
                         y = x_fwd
@@ -226,29 +230,22 @@ def AAN_decoder(spec, labels, params, is_training=True):
 
     # concat spectrum and labels as decoder input
     dec_input = slim.fully_connected(tf.concat([spec, labels], axis=2), hidden_size, scope='merge_dec_input')
-    dec_input = slim.dropout(dec_input, 1-params.merge_dropout, is_training=is_training, scope='merge_dec_input')
-
-    tgt_mask = tf.sequence_mask(tf.shape(dec_input),
-                                maxlen=tf.shape(dec_input])[1],
-                                dtype=tf.float32)
-
-    targets = dec_input * tf.expand_dims(tgt_mask, -1)
+    dec_input = slim.dropout(dec_input, 1-params.residual_dropout, is_training=is_training, scope='merge_dec_input')
 
     # Preparing decoder input
-    dec_pos_bias_fwd = tf.cumsum(tgt_mask, axis=1)
-    dec_pos_bias_fwd = tf.where(tf.less_equal(dec_pos_bias_fwd,0.), tf.ones_like(dec_pos_bias_fwd), dec_pos_bias_fwd)
-    dec_pos_bias_fwd = tf.expand_dims(tf.cast(dec_pos_bias_fwd, tf.float32), 2)
+    dec_pos_bias_fwd = tf.ones_like(dec_input)
+    dec_pos_bias_fwd = tf.cumsum(dec_pos_bias_fwd, axis=1)
 
     # This is a lazy implementation, to assign the correct position embedding, I simply copy the
     # current decoder input 'given_position' times, and assign the whole position embeddings,
     # Only the last decoding value has the meaningful position embeddings
     # TODO: With Average Attention Network, Decoder side position embedding may be unnecessary 
-    decoder_input = layers.attention.add_timing_signal(targets)
+    decoder_input = layers.attention.add_timing_signal(dec_input)
 
     keep_prob = 1.0 - params.residual_dropout
     decoder_input = slim.dropout(decoder_input, keep_prob, is_training=is_training, scope='dec_input_dropout')
 
-    decoder_outputs = AvgAttentionNet(decoder_input, params, pos=[dec_pos_bias_fwd], is_training=is_training)
+    decoder_outputs = AvgAttentionNet(decoder_input, params, pos=dec_pos_bias_fwd, is_training=is_training)
 
     return decoder_outputs
 

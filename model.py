@@ -200,7 +200,7 @@ def acoustic_model(inputs, hparams, lstm_units, lengths, labels=None, is_trainin
   conv_output = conv_net(inputs, hparams)
 
   if use_transformer:
-    return AAN_layer(conv_output, labels, params, is_training)
+    return AAN_layer(conv_output, labels, hparams, is_training)
 
   if lstm_units:
     return lstm_layer(
@@ -245,6 +245,7 @@ def model_fn(features, labels, mode, params, config):
       onset_outputs = acoustic_model(
           spec,
           hparams,
+          labels=onset_labels,
           lstm_units=hparams.onset_lstm_units,
           lengths=length,
           is_training=is_training,
@@ -266,9 +267,11 @@ def model_fn(features, labels, mode, params, config):
       offset_outputs = acoustic_model(
           spec,
           hparams,
+          labels=offset_labels,
           lstm_units=hparams.offset_lstm_units,
           lengths=length,
-          is_training=is_training)
+          is_training=is_training,
+          use_transformer=use_transformer)
       offset_probs = slim.fully_connected(
           offset_outputs,
           constants.MIDI_PITCHES,
@@ -347,18 +350,22 @@ def model_fn(features, labels, mode, params, config):
 
       combined_probs = tf.concat(probs, 2)
 
-      if hparams.combined_lstm_units > 0:
-        outputs = lstm_layer(
-            combined_probs,
-            hparams.batch_size,
-            hparams.combined_lstm_units,
-            lengths=length if hparams.use_lengths else None,
-            stack_size=hparams.combined_rnn_stack_size,
-            use_cudnn=hparams.use_cudnn,
-            is_training=is_training,
-            bidirectional=hparams.bidirectional)
+      if hparams.use_transformer:
+        outputs = AAN_layer(combined_probs, frame_labels, hparams, is_training=is_training)
+
       else:
-        outputs = combined_probs
+        if hparams.combined_lstm_units > 0:
+          outputs = lstm_layer(
+              combined_probs,
+              hparams.batch_size,
+              hparams.combined_lstm_units,
+              lengths=length if hparams.use_lengths else None,
+              stack_size=hparams.combined_rnn_stack_size,
+              use_cudnn=hparams.use_cudnn,
+              is_training=is_training,
+              bidirectional=hparams.bidirectional)
+        else:
+          outputs = combined_probs
 
       frame_probs = slim.fully_connected(
           outputs,
@@ -491,7 +498,7 @@ def get_default_hparams():
 
       use_transformer=True,
       aan_size=256,
-      avg_len=45
+      avg_len=45,
       residual_dropout=0.1,
       relu_dropout=0.0,
       num_decoder_layers=4,
