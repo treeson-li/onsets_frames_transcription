@@ -10,7 +10,7 @@ import copy
 import tensorflow as tf
 import thumt.interface as interface
 import thumt.layers as layers
-
+import tensorflow.contrib.slim as slim
 
 def get_weights(params):
     svocab = params.vocabulary["source"]
@@ -55,13 +55,12 @@ def layer_process(x, mode):
         raise ValueError("Unknown mode %s" % mode)
 
 
-def residual_fn(x, y, keep_prob=None):
-    if keep_prob and keep_prob < 1.0:
-        y = tf.nn.dropout(y, keep_prob)
+def residual_fn(x, y, keep_prob=None, is_training=True):
+    y = slim.dropout(y, keep_prob, is_training=is_training, scope='residual_fn')
     return x + y
 
 
-def ffn_layer(inputs, hidden_size, output_size, keep_prob=None,
+def ffn_layer(inputs, hidden_size, output_size, keep_prob=None, is_training=True,
               dtype=None, scope=None):
     with tf.variable_scope(scope, default_name="ffn_layer", values=[inputs],
                            dtype=dtype):
@@ -69,8 +68,7 @@ def ffn_layer(inputs, hidden_size, output_size, keep_prob=None,
             hidden = layers.nn.linear(inputs, hidden_size, True, True)
             hidden = tf.nn.relu(hidden)
 
-        if keep_prob and keep_prob < 1.0:
-            hidden = tf.nn.dropout(hidden, keep_prob)
+        hidden = slim.dropout(hidden, keep_prob, is_training=is_training, scope='ffn_layer')
 
         with tf.variable_scope("output_layer"):
             output = layers.nn.linear(hidden, output_size, True, True)
@@ -183,6 +181,76 @@ def transformer_decoder(inputs, memory, bias, mem_bias, params, pos=None, dtype=
         if given_inputs is not None:
             decoding_outputs = tf.concat(decoding_outputs, axis=0)
         return outputs, decoding_outputs
+
+def AvgAttentionNet(inputs, params, pos=None, dtype=None, scope=None, is_training=True):
+    with tf.variable_scope(scope, default_name="decoder", dtype=dtype, is_training=is_training,
+                           values=[inputs] + pos):
+        x = inputs
+        normn = params.avg_len
+        pos = tf.where(tf.less(pos < normn), pos, normn)
+        for layer in range(params.num_decoder_layers):
+            with tf.variable_scope("layer_%d" % layer):
+                # The Average Attention Network
+                with tf.variable_scope("position_forward"):
+                    # Cumulative Summing                    
+                    x_cum = tf.cumsum(x, axis=1)
+                    x_cum_shift = tf.pad(x_cum, [[0, 0], [normn, 0], [0, 0]])[:, :-normn, :]                    
+                    x_fwd = tf.subtract(x_cum, x_cum_shift) / pos[0]
+                    # FFN activation
+                    if params.use_ffn:
+                        y = ffn_layer(
+                            layer_process(x_fwd, params.layer_preprocess),
+                            params.ffn_filter_size,
+                            params.aan_size,
+                            1.0 - params.relu_dropout
+                        )
+                    else:
+                        y = x_fwd
+
+                    # Gating layer
+                    z = layers.nn.linear(tf.concat([x, y], axis=-1), 
+                        params.aan_size*2, True, True, scope="z_project")
+                    i, f = tf.split(z, [params.aan_size, params.aan_size], axis=-1)
+                    y = tf.sigmoid(i) * x + tf.sigmoid(f) * y
+                    
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                    x = layer_process(x, params.layer_postprocess)
+    
+    return  x
+
+def AAN_decoder(spec, labels, params, is_training=True):
+
+    hidden_size = params.aan_size
+    # Shift right
+    labels = tf.pad(labels, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+
+    # concat spectrum and labels as decoder input
+    dec_input = slim.fully_connected(tf.concat([spec, labels], axis=2), hidden_size, scope='merge_dec_input')
+    dec_input = slim.dropout(dec_input, 1-params.merge_dropout, is_training=is_training, scope='merge_dec_input')
+
+    tgt_mask = tf.sequence_mask(tf.shape(dec_input),
+                                maxlen=tf.shape(dec_input])[1],
+                                dtype=tf.float32)
+
+    targets = dec_input * tf.expand_dims(tgt_mask, -1)
+
+    # Preparing decoder input
+    dec_pos_bias_fwd = tf.cumsum(tgt_mask, axis=1)
+    dec_pos_bias_fwd = tf.where(tf.less_equal(dec_pos_bias_fwd,0.), tf.ones_like(dec_pos_bias_fwd), dec_pos_bias_fwd)
+    dec_pos_bias_fwd = tf.expand_dims(tf.cast(dec_pos_bias_fwd, tf.float32), 2)
+
+    # This is a lazy implementation, to assign the correct position embedding, I simply copy the
+    # current decoder input 'given_position' times, and assign the whole position embeddings,
+    # Only the last decoding value has the meaningful position embeddings
+    # TODO: With Average Attention Network, Decoder side position embedding may be unnecessary 
+    decoder_input = layers.attention.add_timing_signal(targets)
+
+    keep_prob = 1.0 - params.residual_dropout
+    decoder_input = slim.dropout(decoder_input, keep_prob, is_training=is_training, scope='dec_input_dropout')
+
+    decoder_outputs = AvgAttentionNet(decoder_input, params, pos=[dec_pos_bias_fwd], is_training=is_training)
+
+    return decoder_outputs
 
 
 def model_graph(features, labels, mode, params, given_memory=None, given_src_mask=None, given_decoder=None, given_position=None):
@@ -410,6 +478,7 @@ class Transformer(interface.NMTModel):
             clip_grad_norm=0.0,
             aan_mask=True,
             use_ffn=False,
+            avg_len=45
         )
 
         return params

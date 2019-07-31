@@ -27,6 +27,7 @@ import constants
 import tensorflow as tf
 
 import tensorflow.contrib.slim as slim
+import thumt.models.transformer as transformer
 
 
 def conv_net(inputs, hparams):
@@ -189,9 +190,17 @@ def lstm_layer(inputs,
     return outputs
 
 
-def acoustic_model(inputs, hparams, lstm_units, lengths, is_training=True):
+def AAN_layer(inputs, labels, params, is_training=True):
+  """Create a Average Attention Network layer."""
+  return transformer.AAN_decoder(inputs, labels, params, is_training)
+
+
+def acoustic_model(inputs, hparams, lstm_units, lengths, labels=None, is_training=True, use_transformer=False):
   """Acoustic model that handles all specs for a sequence in one window."""
   conv_output = conv_net(inputs, hparams)
+
+  if use_transformer:
+    return AAN_layer(conv_output, labels, params, is_training)
 
   if lstm_units:
     return lstm_layer(
@@ -217,6 +226,7 @@ def model_fn(features, labels, mode, params, config):
   spec = features.spec
 
   is_training = mode == tf.estimator.ModeKeys.TRAIN
+  use_transformer = params.use_transformer
 
   if is_training:
     onset_labels = labels.onsets
@@ -237,7 +247,8 @@ def model_fn(features, labels, mode, params, config):
           hparams,
           lstm_units=hparams.onset_lstm_units,
           lengths=length,
-          is_training=is_training)
+          is_training=is_training,
+          use_transformer=use_transformer)
       onset_probs = slim.fully_connected(
           onset_outputs,
           constants.MIDI_PITCHES,
@@ -472,8 +483,20 @@ def get_default_hparams():
       dropout_keep_amts=[1.0, 0.25, 0.25],
       fc_size=768,
       fc_dropout_keep_amt=0.5,
+      merge_dropout=0.1,
       use_lengths=False,
       use_cudnn=True,
       rnn_dropout_drop_amt=0.0,
       bidirectional=True,
+
+      use_transformer=True,
+      aan_size=256,
+      avg_len=45
+      residual_dropout=0.1,
+      relu_dropout=0.0,
+      num_decoder_layers=4,
+      use_ffn=True,
+      ffn_filter_size=512,
+      layer_preprocess="none",
+      layer_postprocess="layer_norm"      
   )

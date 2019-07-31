@@ -39,7 +39,7 @@ tf.app.flags.DEFINE_boolean(
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/data/onsets_frames_ori/',
+    'model_dir', '~/data/aan/',
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')
