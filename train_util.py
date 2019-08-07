@@ -76,14 +76,15 @@ def create_estimator(model_fn,
                      keep_checkpoint_max=None,
                      warm_start_from=None):
   """Creates an estimator."""
+  NUM_GPUS = 4
+  mirrored_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=NUM_GPUS)
   config = tf.contrib.tpu.RunConfig(
-      tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=save_checkpoint_steps),
-      master=master,
-      save_summary_steps=save_summary_steps,
-      save_checkpoints_steps=save_checkpoint_steps,
-      keep_checkpoint_max=keep_checkpoint_max,
-      keep_checkpoint_every_n_hours=1)
+    train_distribute=mirrored_strategy,
+    eval_distribute=mirrored_strategy,
+    save_summary_steps=save_summary_steps,
+    save_checkpoints_steps=save_checkpoint_steps,
+    keep_checkpoint_max=keep_checkpoint_max,
+    keep_checkpoint_every_n_hours=1)
 
   params = copy.deepcopy(hparams)
   params.del_hparam('batch_size')
