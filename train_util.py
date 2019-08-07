@@ -87,7 +87,6 @@ def create_estimator(model_fn,
     keep_checkpoint_every_n_hours=2)
 
   params = copy.deepcopy(hparams)
-  #params.del_hparam('batch_size')
   return tf.estimator.Estimator(model_fn=model_fn,
                                   model_dir=model_dir,
                                   config=config,
