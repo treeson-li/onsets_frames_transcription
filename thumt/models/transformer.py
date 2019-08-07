@@ -297,7 +297,7 @@ def model_graph(features, labels, mode, params, given_memory=None, given_src_mas
             dec_pos_bias_fwd = tf.expand_dims(tf.cast(dec_pos_bias_fwd, tf.float32), 2)
 
     # Shift left
-    # If given_decoer is not None, indicating a inference procedure,
+    # If given_decoder is not None, indicating a inference procedure,
     if given_decoder is not None:
         # given_position: starts from 1, a value greater than 1 means non-start position
         decoder_input = targets * tf.to_float(given_position > 1.)

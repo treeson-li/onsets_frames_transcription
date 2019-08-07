@@ -25,7 +25,7 @@ print('\n itetator and next record is :')
 print(iterator)
 print(next_record)
 
-writer = tf.python_io.TFRecordWriter(spec_tfrecord, options=None)
+writer = tf.io.TFRecordWriter(spec_tfrecord, options=None)
 exit
 with tf.io.TFRecordWriter(spec_tfrecord) as writer:
     with tf.Session() as sess:
@@ -33,7 +33,7 @@ with tf.io.TFRecordWriter(spec_tfrecord) as writer:
         try:
             i = 0
             while True:
-                print('i is: ', i, end='\r')
+                print('No. is: ', i, end='\n')
                 i += 1
                 result = sess.run(next_record)
                 feature = result[0]
@@ -67,7 +67,7 @@ with tf.io.TFRecordWriter(spec_tfrecord) as writer:
                 writer.write(example.SerializeToString()) 
                 # print(type(spec), spec)
                 # print(type(length), length)
-                # print(type(sequence_id), sequence_id)
+                print(type(sequence_id), sequence_id)
                 # print(type(spectrogram_hash), spectrogram_hash)
                 # print(type(labels), labels)
                 # print(type(note_sequence), note_sequence)
