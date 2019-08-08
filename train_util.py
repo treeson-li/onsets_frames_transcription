@@ -71,9 +71,9 @@ def create_estimator(model_fn,
                      hparams,
                      use_tpu=False,
                      master='',
-                     save_checkpoint_steps=50000,
-                     save_summary_steps=50000,
-                     keep_checkpoint_max=None,
+                     save_checkpoint_steps=10000,
+                     save_summary_steps=10000,
+                     keep_checkpoint_max=5,
                      warm_start_from=None):
   """Creates an estimator."""
   NUM_GPUS = 4
