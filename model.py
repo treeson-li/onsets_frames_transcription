@@ -234,6 +234,12 @@ def model_fn(features, labels, mode, params, config):
     velocity_labels = labels.velocities
     frame_labels = labels.labels
     frame_label_weights = labels.label_weights
+  else:
+    onset_labels = None
+    offset_labels = None
+    velocity_labels = None
+    frame_labels = None
+    frame_label_weights = None
 
   if hparams.stop_activation_gradient and not hparams.activation_loss:
     raise ValueError(

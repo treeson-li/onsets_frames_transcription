@@ -226,7 +226,10 @@ def AAN_decoder(spec, labels, params, is_training=True):
 
     hidden_size = params.aan_size
     # Shift right
-    labels = tf.pad(labels, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+    if labels is None:
+        labels = tf.zeros([tf.shape(sepc)[0], tf.shape(spec)[1], constants.MIDI_PITCHES], dtype=tf.float32)
+    elif is_training:
+        labels = tf.pad(labels, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
 
     # concat spectrum and labels as decoder input
     dec_input = slim.fully_connected(tf.concat([spec, labels], axis=2), hidden_size, scope='merge_dec_input')
