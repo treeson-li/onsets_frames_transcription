@@ -29,6 +29,9 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 
+init_uniform = tf.truncated_normal_initializer(mean=0.0, stddev=1.0, seed=None, dtype=tf.float32)
+init_uniform = tf.random_uniform_initializer(minval=0, maxval=1, seed=None, dtype=tf.float32)
+
 def conv_net(inputs, hparams):
   """Builds the ConvNet from Kelz 2016."""
   with slim.arg_scope(
@@ -336,11 +339,11 @@ def model_fn(features, labels, mode, params, config):
 
       combined_probs = tf.concat(probs, 2)
 
-      if hparams.combined_lstm_units > 0:
+      if hparams.fussion_lstm_units > 0:
         outputs = lstm_layer(
             combined_probs,
             hparams.batch_size,
-            hparams.combined_lstm_units,
+            hparams.fussion_lstm_units,
             lengths=length if hparams.use_lengths else None,
             stack_size=hparams.combined_rnn_stack_size,
             use_cudnn=hparams.use_cudnn,
@@ -382,11 +385,43 @@ def model_fn(features, labels, mode, params, config):
         tf.losses.add_loss(tf.reduce_mean(activation_losses))
         losses['activation'] = activation_losses
 
+    with tf.variable_scope('spec'):
+      fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
+      fuss_output = lstm_layer(
+        fussion,
+        hparams.batch_size,
+        hparams.fussion_lstm_units,
+        lengths=length if hparams.use_lengths else None,
+        stack_size=hparams.combined_rnn_stack_size,
+        use_cudnn=hparams.use_cudnn,
+        is_training=is_training,
+        bidirectional=hparams.bidirectional)
+      spec_bins = tf.shape(spec)[2]
+      spec_dynamic = slim.fully_connected(
+          fuss_output,
+          constants.MIDI_PITCHES * spec_bins,
+          activation_fn=tf.sigmoid,
+          scope='spec_dynamic')
+      dims = tf.shape(spec_dynamic)
+      spec_dynamic = tf.reshape(spec_dynamic, (dims[0], dims[1], constants.MIDI_PITCHES, spec_bins), 'spec_prob_reshape')
+      key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES,tf.shape(spec)[2]], initializer=init_uniform)
+      spec_output = tf.multiply(key_template, spec_dynamic)
+      spec_output = tf.reduce_sum(spec_output, axis=2)
+
+      # spec_out_flat is used during inference.
+      spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
+      if is_training:
+        spec_labels_flat = flatten_maybe_padded_sequences(spec, length)
+        spec_losses = tf_utils.log_loss(spec_labels_flat, spec_out_flat)
+        tf.losses.add_loss(tf.reduce_mean(spec_losses))
+        losses['spec'] = spec_losses
+
   predictions = {
       'frame_probs_flat': frame_probs_flat,
       'onset_probs_flat': onset_probs_flat,
       'offset_probs_flat': offset_probs_flat,
       'velocity_values_flat': velocity_values_flat,
+      'spec_out_flat': spec_out_flat
   }
 
   train_op = None
@@ -456,7 +491,7 @@ def get_default_hparams():
       offset_lstm_units=256,
       velocity_lstm_units=0,
       frame_lstm_units=0,
-      combined_lstm_units=256,
+      fussion_lstm_units=256,
       acoustic_rnn_stack_size=1,
       combined_rnn_stack_size=1,
       activation_loss=False,
@@ -476,4 +511,5 @@ def get_default_hparams():
       use_cudnn=True,
       rnn_dropout_drop_amt=0.0,
       bidirectional=True,
+      fussion_lstm_units=256
   )
