@@ -388,11 +388,10 @@ def model_fn(features, labels, mode, params, config):
 
     with tf.variable_scope('spec'):
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
-      spec_bins = 229
       fussion = slim.fully_connected(
           fussion,
           hparams.fussion_lstm_units*2,
-          activation_fn=tf.sigmoid,
+          activation_fn=tf.nn.relu,
           scope='fussion')
       
       fuss_output = lstm_layer(
