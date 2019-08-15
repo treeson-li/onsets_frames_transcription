@@ -219,6 +219,7 @@ def model_fn(features, labels, mode, params, config):
   spec = features.spec
 
   is_training = mode == tf.estimator.ModeKeys.TRAIN
+  check = tf.add_check_numerics_ops()
 
   if is_training:
     onset_labels = labels.onsets
@@ -386,6 +387,7 @@ def model_fn(features, labels, mode, params, config):
         losses['activation'] = activation_losses
 
     with tf.variable_scope('spec'):
+      tfe.seterr(inf_or_nan='raise')
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
       fuss_output = lstm_layer(
         fussion,
