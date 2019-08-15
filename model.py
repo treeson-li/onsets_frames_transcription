@@ -254,7 +254,7 @@ def model_fn(features, labels, mode, params, config):
         onset_losses = tf_utils.log_loss(onset_labels_flat, onset_probs_flat)
         tf.losses.add_loss(tf.reduce_mean(onset_losses))
         losses['onset'] = onset_losses
-        print('onset shape & onset_label shape', tf.shape(onset_probs_flat), tf.shape(onset_labels_flat))
+        
     with tf.variable_scope('offsets'):
       offset_outputs = acoustic_model(
           spec,
@@ -373,6 +373,8 @@ def model_fn(features, labels, mode, params, config):
           frame_labels_flat, frame_probs_flat, weights=frame_loss_weights)
       tf.losses.add_loss(tf.reduce_mean(frame_losses))
       losses['frame'] = frame_losses
+      print("-"*30)
+      print('frame_labels_flat & frame_probs_flat shape', tf.shape(frame_labels_flat), tf.shape(frame_probs_flat))
 
       if hparams.activation_loss:
         if hparams.weight_frame_and_activation_loss:
