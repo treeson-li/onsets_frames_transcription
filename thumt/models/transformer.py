@@ -226,9 +226,9 @@ def AAN_decoder(spec, labels, params, is_training=True):
 
     hidden_size = params.aan_size
     
-    # spectrum as decoder input
-    dec_input = spec
-    dec_input = slim.dropout(dec_input, 1-params.residual_dropout, is_training=is_training, scope='merge_dec_input')
+    # concat spectrum and labels(no longer yet) as decoder input
+    dec_input = slim.fully_connected(spec, hidden_size, scope='spec_dec_input')
+    dec_input = slim.dropout(dec_input, 1-params.residual_dropout, is_training=is_training, scope='dec_input_dropout')
 
     # Preparing decoder input
     dec_pos_bias_fwd = tf.ones_like(dec_input)
