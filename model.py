@@ -388,6 +388,7 @@ def model_fn(features, labels, mode, params, config):
 
     with tf.variable_scope('spec'):
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
+      '''
       fuss_output = lstm_layer(
         fussion,
         hparams.batch_size,
@@ -397,12 +398,13 @@ def model_fn(features, labels, mode, params, config):
         use_cudnn=hparams.use_cudnn,
         is_training=is_training,
         bidirectional=hparams.bidirectional)
+      '''
       
       spec_bins = 229
       spec_dynamic = slim.fully_connected(
-          fuss_output,
+          fussion,
           spec_bins,#constants.MIDI_PITCHES * spec_bins,
-          activation_fn=tf.nn.relu,
+          activation_fn=tf.sigmoid,
           scope='spec_dynamic')
       '''
       spec_dynamic = slim.fully_connected(
