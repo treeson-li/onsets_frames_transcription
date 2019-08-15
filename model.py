@@ -29,8 +29,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 
-init_uniform = tf.truncated_normal_initializer(mean=0.0, stddev=1.0, seed=None, dtype=tf.float32)
-init_uniform = tf.random_uniform_initializer(minval=0, maxval=1, seed=None, dtype=tf.float32)
+init_uniform = tf.random_uniform_initializer(minval=0, maxval=0.01, seed=None, dtype=tf.float32)
 
 def conv_net(inputs, hparams):
   """Builds the ConvNet from Kelz 2016."""
