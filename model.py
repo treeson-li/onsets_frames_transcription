@@ -399,6 +399,11 @@ def model_fn(features, labels, mode, params, config):
         bidirectional=hparams.bidirectional)
       
       spec_bins = 229
+      spec_dynamic = slim.fully_connected(
+          fuss_output,
+          spec_bins,#constants.MIDI_PITCHES * spec_bins,
+          activation_fn=tf.relu,
+          scope='spec_dynamic')
       '''
       spec_dynamic = slim.fully_connected(
           fuss_output,
@@ -413,7 +418,7 @@ def model_fn(features, labels, mode, params, config):
       #spec_output = tf.layers.batch_normalization(spec_output, axis=2, training=is_training)
       spec_output = tf.reduce_sum(spec_dynamic, axis=2)
       '''
-      spec_output = fuss_output
+      spec_output = spec_dynamic
 
       
       # spec_out_flat is not used during inference.
