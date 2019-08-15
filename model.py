@@ -387,29 +387,23 @@ def model_fn(features, labels, mode, params, config):
         losses['activation'] = activation_losses
 
     with tf.variable_scope('spec'):
-      tf.contrib.eager.seterr(inf_or_nan='raise')
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
-      try:
-        fuss_output = lstm_layer(
+      fuss_output = lstm_layer(
         fussion,
         hparams.batch_size,
-        hparams.fussion_lstm_units,
+        229, #hparams.fussion_lstm_units,
         lengths=length if hparams.use_lengths else None,
         stack_size=hparams.combined_rnn_stack_size,
         use_cudnn=hparams.use_cudnn,
         is_training=is_training,
         bidirectional=hparams.bidirectional)
-      except Exception as e:
-        print("Caught Exception: %s" % e)
+        '''
       spec_bins = 229
-      try:
-        spec_dynamic = slim.fully_connected(
+      spec_dynamic = slim.fully_connected(
           fuss_output,
           constants.MIDI_PITCHES * spec_bins,
           activation_fn=tf.sigmoid,
           scope='spec_dynamic')
-      except Exception as e:
-        print("Caught Exception: %s" % e)
       dims = tf.shape(spec_dynamic)
       spec_dynamic = tf.reshape(spec_dynamic, (dims[0], dims[1], constants.MIDI_PITCHES, spec_bins), 'sspec_dynamic_reshape')
       #key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
@@ -417,6 +411,9 @@ def model_fn(features, labels, mode, params, config):
       #spec_output = tf.reduce_sum(spec_output, axis=2)
       #spec_output = tf.layers.batch_normalization(spec_output, axis=2, training=is_training)
       spec_output = tf.reduce_sum(spec_dynamic, axis=2)
+      '''
+      spec_output = fuss_output
+
       
       # spec_out_flat is not used during inference.
       if is_training:
