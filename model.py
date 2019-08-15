@@ -388,6 +388,7 @@ def model_fn(features, labels, mode, params, config):
 
     with tf.variable_scope('spec'):
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
+      # if no fc layer, lstm will have Nan value
       fussion = slim.fully_connected(
           fussion,
           hparams.fussion_lstm_units*2,
@@ -407,25 +408,16 @@ def model_fn(features, labels, mode, params, config):
       spec_bins = 229
       spec_dynamic = slim.fully_connected(
           fuss_output,
-          spec_bins,#constants.MIDI_PITCHES * spec_bins,
-          activation_fn=tf.sigmoid,
-          scope='spec_dynamic')
-      '''
-      spec_dynamic = slim.fully_connected(
-          fuss_output,
           constants.MIDI_PITCHES * spec_bins,
-          activation_fn=tf.sigmoid,
+          activation_fn=tf.nn.relu,
           scope='spec_dynamic')
+      
       dims = tf.shape(spec_dynamic)
       spec_dynamic = tf.reshape(spec_dynamic, (dims[0], dims[1], constants.MIDI_PITCHES, spec_bins), 'sspec_dynamic_reshape')
-      #key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
-      #spec_output = tf.multiply(spec_dynamic, key_template)
-      #spec_output = tf.reduce_sum(spec_output, axis=2)
+      key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
+      spec_output = tf.multiply(spec_dynamic, key_template)
+      spec_output = tf.reduce_sum(spec_output, axis=2)
       #spec_output = tf.layers.batch_normalization(spec_output, axis=2, training=is_training)
-      spec_output = tf.reduce_sum(spec_dynamic, axis=2)
-      '''
-      spec_output = spec_dynamic
-
       
       # spec_out_flat is not used during inference.
       if is_training:
