@@ -389,7 +389,8 @@ def model_fn(features, labels, mode, params, config):
     with tf.variable_scope('spec'):
       tf.contrib.eager.seterr(inf_or_nan='raise')
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
-      fuss_output = lstm_layer(
+      try:
+        fuss_output = lstm_layer(
         fussion,
         hparams.batch_size,
         hparams.fussion_lstm_units,
@@ -398,6 +399,8 @@ def model_fn(features, labels, mode, params, config):
         use_cudnn=hparams.use_cudnn,
         is_training=is_training,
         bidirectional=hparams.bidirectional)
+      except Exception as e:
+        print("Caught Exception: %s" % e)
       spec_bins = 229
       spec_dynamic = slim.fully_connected(
           fuss_output,
