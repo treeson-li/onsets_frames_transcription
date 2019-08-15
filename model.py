@@ -411,7 +411,7 @@ def model_fn(features, labels, mode, params, config):
       #spec_output = tf.reduce_sum(spec_output, axis=2)
       #spec_output = tf.layers.batch_normalization(spec_output, axis=2, training=is_training)
       spec_output = tf.reduce_sum(spec_dynamic, axis=2)
-      '''
+        '''
       spec_output = fuss_output
 
       
