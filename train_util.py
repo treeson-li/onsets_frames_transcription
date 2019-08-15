@@ -76,8 +76,13 @@ def create_estimator(model_fn,
                      keep_checkpoint_max=5,
                      warm_start_from=None):
   """Creates an estimator."""
-  NUM_GPUS = 4
-  mirrored_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=NUM_GPUS)
+  NUM_GPUS = 1
+  if NUM_GPUS == 1:
+    mirrored_strategy = tf.contrib.distribute.OneDeviceStrategy(device='/gpu:1')
+  elif NUM_GPUS > 1:
+    mirrored_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=NUM_GPUS)
+  else:
+    mirrored_strategy = None
   config = tf.estimator.RunConfig(
     train_distribute=mirrored_strategy,
     eval_distribute=mirrored_strategy,
