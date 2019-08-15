@@ -402,7 +402,7 @@ def model_fn(features, labels, mode, params, config):
       spec_dynamic = slim.fully_connected(
           fuss_output,
           spec_bins,#constants.MIDI_PITCHES * spec_bins,
-          activation_fn=tf.relu,
+          activation_fn=tf.nn.relu,
           scope='spec_dynamic')
       '''
       spec_dynamic = slim.fully_connected(
