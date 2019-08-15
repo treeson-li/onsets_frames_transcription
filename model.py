@@ -402,11 +402,14 @@ def model_fn(features, labels, mode, params, config):
       except Exception as e:
         print("Caught Exception: %s" % e)
       spec_bins = 229
-      spec_dynamic = slim.fully_connected(
+      try:
+        spec_dynamic = slim.fully_connected(
           fuss_output,
           constants.MIDI_PITCHES * spec_bins,
           activation_fn=tf.sigmoid,
           scope='spec_dynamic')
+      except Exception as e:
+        print("Caught Exception: %s" % e)
       dims = tf.shape(spec_dynamic)
       spec_dynamic = tf.reshape(spec_dynamic, (dims[0], dims[1], constants.MIDI_PITCHES, spec_bins), 'sspec_dynamic_reshape')
       #key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
