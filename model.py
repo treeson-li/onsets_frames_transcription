@@ -387,7 +387,7 @@ def model_fn(features, labels, mode, params, config):
         losses['activation'] = activation_losses
 
     with tf.variable_scope('spec'):
-      tfe.seterr(inf_or_nan='raise')
+      tf.contrib.eager.seterr(inf_or_nan='raise')
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
       fuss_output = lstm_layer(
         fussion,
