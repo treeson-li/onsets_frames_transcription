@@ -339,11 +339,11 @@ def model_fn(features, labels, mode, params, config):
 
       combined_probs = tf.concat(probs, 2)
 
-      if hparams.fussion_lstm_units > 0:
+      if hparams.combined_lstm_units > 0:
         outputs = lstm_layer(
             combined_probs,
             hparams.batch_size,
-            hparams.fussion_lstm_units,
+            hparams.combined_lstm_units,
             lengths=length if hparams.use_lengths else None,
             stack_size=hparams.combined_rnn_stack_size,
             use_cudnn=hparams.use_cudnn,
@@ -403,14 +403,14 @@ def model_fn(features, labels, mode, params, config):
           activation_fn=tf.sigmoid,
           scope='spec_dynamic')
       dims = tf.shape(spec_dynamic)
-      spec_dynamic = tf.reshape(spec_dynamic, (dims[0], dims[1], constants.MIDI_PITCHES, spec_bins), 'spec_prob_reshape')
-      key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES,tf.shape(spec)[2]], initializer=init_uniform)
+      spec_dynamic = tf.reshape(spec_dynamic, (dims[0], dims[1], constants.MIDI_PITCHES, spec_bins), 'sspec_dynamic_reshape')
+      key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
       spec_output = tf.multiply(key_template, spec_dynamic)
       spec_output = tf.reduce_sum(spec_output, axis=2)
 
-      # spec_out_flat is used during inference.
-      spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
+      # spec_out_flat is not used during inference.
       if is_training:
+        spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
         spec_labels_flat = flatten_maybe_padded_sequences(spec, length)
         spec_losses = tf_utils.log_loss(spec_labels_flat, spec_out_flat)
         tf.losses.add_loss(tf.reduce_mean(spec_losses))
@@ -447,6 +447,12 @@ def model_fn(features, labels, mode, params, config):
     ],
                                       axis=3)
     images['ActivationPianorolls'] = activation_pianorolls
+    spec_pianorolls = tf.concat([
+        spec[:, :, :, tf.newaxis], spec_output[:, :, :, tf.newaxis],
+        tf.zeros(tf.shape(spec))[:, :, :, tf.newaxis]
+    ],
+                                      axis=3)
+    images['SpecPianorolls'] = spec_pianorolls
     for name, image in images.items():
       tf.summary.image(name, image)
 
@@ -491,7 +497,7 @@ def get_default_hparams():
       offset_lstm_units=256,
       velocity_lstm_units=0,
       frame_lstm_units=0,
-      fussion_lstm_units=256,
+      combined_lstm_units=256,
       acoustic_rnn_stack_size=1,
       combined_rnn_stack_size=1,
       activation_loss=False,
