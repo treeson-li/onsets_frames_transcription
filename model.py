@@ -405,8 +405,9 @@ def model_fn(features, labels, mode, params, config):
       dims = tf.shape(spec_dynamic)
       spec_dynamic = tf.reshape(spec_dynamic, (dims[0], dims[1], constants.MIDI_PITCHES, spec_bins), 'sspec_dynamic_reshape')
       key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
-      spec_output = tf.multiply(key_template, spec_dynamic)
+      spec_output = tf.multiply(spec_dynamic, key_template)
       spec_output = tf.reduce_sum(spec_output, axis=2)
+      spec_output = tf.reshape(spec_output, (-1, spec_bins))
 
       # spec_out_flat is not used during inference.
       if is_training:
