@@ -254,6 +254,7 @@ def model_fn(features, labels, mode, params, config):
         onset_losses = tf_utils.log_loss(onset_labels_flat, onset_probs_flat)
         tf.losses.add_loss(tf.reduce_mean(onset_losses))
         losses['onset'] = onset_losses
+        print('onset shape & onset_label shape', tf.shape(onset_probs_flat), tf.shape(onset_labels_flat))
     with tf.variable_scope('offsets'):
       offset_outputs = acoustic_model(
           spec,
@@ -407,8 +408,7 @@ def model_fn(features, labels, mode, params, config):
       key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
       spec_output = tf.multiply(spec_dynamic, key_template)
       spec_output = tf.reduce_sum(spec_output, axis=2)
-      spec_output = tf.reshape(spec_output, (-1, spec_bins))
-
+      
       # spec_out_flat is not used during inference.
       if is_training:
         spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
