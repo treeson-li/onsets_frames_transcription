@@ -449,6 +449,7 @@ def model_fn(features, labels, mode, params, config):
     ],
                                       axis=3)
     images['ActivationPianorolls'] = activation_pianorolls
+    spec = tf.reshape(spec, (hparams.batch_size, -1, spec_bins))
     spec_pianorolls = tf.concat([
         spec[:, :, :, tf.newaxis], spec_output[:, :, :, tf.newaxis],
         tf.zeros(tf.shape(spec))[:, :, :, tf.newaxis]
