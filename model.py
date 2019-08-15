@@ -396,7 +396,7 @@ def model_fn(features, labels, mode, params, config):
         use_cudnn=hparams.use_cudnn,
         is_training=is_training,
         bidirectional=hparams.bidirectional)
-      spec_bins = tf.shape(spec)[2]
+      spec_bins = 229
       spec_dynamic = slim.fully_connected(
           fuss_output,
           constants.MIDI_PITCHES * spec_bins,
