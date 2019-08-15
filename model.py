@@ -391,7 +391,7 @@ def model_fn(features, labels, mode, params, config):
       fuss_output = lstm_layer(
         fussion,
         hparams.batch_size,
-        229, #hparams.fussion_lstm_units,
+        hparams.fussion_lstm_units,
         lengths=length if hparams.use_lengths else None,
         stack_size=hparams.combined_rnn_stack_size,
         use_cudnn=hparams.use_cudnn,
