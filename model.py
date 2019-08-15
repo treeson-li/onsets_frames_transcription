@@ -416,8 +416,8 @@ def model_fn(features, labels, mode, params, config):
         print('spec_out_flat shape ', tf.shape(spec_out_flat))
         spec_out_flat = tf.reshape(spec_out_flat, (-1, spec_bins))
         print('spec_out_flat reshape ', tf.shape(spec_out_flat))
-        print('spec_labels_flat shape ', tf.shape(spec_labels_flat))
         spec_labels_flat = flatten_maybe_padded_sequences(spec, length)
+        print('spec_labels_flat shape ', tf.shape(spec_labels_flat))
         spec_losses = tf_utils.log_loss(spec_labels_flat, spec_out_flat)
         tf.losses.add_loss(tf.reduce_mean(spec_losses))
         losses['spec'] = spec_losses
