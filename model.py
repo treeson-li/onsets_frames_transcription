@@ -408,14 +408,14 @@ def model_fn(features, labels, mode, params, config):
       key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
       spec_output = tf.multiply(spec_dynamic, key_template)
       spec_output = tf.reduce_sum(spec_output, axis=2)
-      print('-'*30)
-      print('shape of spec', tf.shape(spec_output))
-      print('shape of label', tf.shape(spec))
       
       # spec_out_flat is not used during inference.
       if is_training:
         spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
         spec_labels_flat = flatten_maybe_padded_sequences(spec, length)
+        print('-'*30)
+        print('shape of spec', tf.shape(spec_out_flat))
+        print('shape of label', tf.shape(spec_labels_flat))
         spec_losses = tf_utils.log_loss(spec_labels_flat, spec_out_flat)
         tf.losses.add_loss(tf.reduce_mean(spec_losses))
         losses['spec'] = spec_losses
