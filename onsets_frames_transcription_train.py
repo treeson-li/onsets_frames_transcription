@@ -35,7 +35,7 @@ tf.app.flags.DEFINE_string(
     'examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_train_spec.tfrecord',
     'Path to a TFRecord file of train/eval examples.')
 tf.app.flags.DEFINE_boolean(
-    'preprocess_examples', False,
+    'preprocess_examples', False, 
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
