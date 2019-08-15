@@ -407,6 +407,7 @@ def model_fn(features, labels, mode, params, config):
       key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
       spec_output = tf.multiply(spec_dynamic, key_template)
       spec_output = tf.reduce_sum(spec_output, axis=2)
+      spec_output = tf.layers.batch_normalization(spec_output, axis=2, training=is_training)
       
       # spec_out_flat is not used during inference.
       if is_training:
