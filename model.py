@@ -373,9 +373,7 @@ def model_fn(features, labels, mode, params, config):
           frame_labels_flat, frame_probs_flat, weights=frame_loss_weights)
       tf.losses.add_loss(tf.reduce_mean(frame_losses))
       losses['frame'] = frame_losses
-      print("-"*30)
-      print('frame_labels_flat & frame_probs_flat shape', tf.shape(frame_labels_flat), tf.shape(frame_probs_flat))
-
+      
       if hparams.activation_loss:
         if hparams.weight_frame_and_activation_loss:
           activation_loss_weights = frame_label_weights
@@ -410,6 +408,9 @@ def model_fn(features, labels, mode, params, config):
       key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
       spec_output = tf.multiply(spec_dynamic, key_template)
       spec_output = tf.reduce_sum(spec_output, axis=2)
+      print('-'*30)
+      print('shape of spec', tf.shape(spec_output))
+      print('shape of label', tf.shape(spec))
       
       # spec_out_flat is not used during inference.
       if is_training:
