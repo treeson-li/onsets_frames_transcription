@@ -470,7 +470,7 @@ def get_default_hparams():
     hyperparameters for the model.
   """
   return tf.contrib.training.HParams(
-      batch_size=8,
+      batch_size=6,
       learning_rate=0.0006,
       decay_steps=10000,
       decay_rate=0.98,
