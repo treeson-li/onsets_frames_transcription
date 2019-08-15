@@ -412,10 +412,8 @@ def model_fn(features, labels, mode, params, config):
       # spec_out_flat is not used during inference.
       if is_training:
         spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
+        spec_out_flat = tf.reshape(spec_out_flat, (-1, spec_bins))
         spec_labels_flat = flatten_maybe_padded_sequences(spec, length)
-        print('-'*30)
-        print('shape of spec', tf.shape(spec_out_flat))
-        print('shape of label', tf.shape(spec_labels_flat))
         spec_losses = tf_utils.log_loss(spec_labels_flat, spec_out_flat)
         tf.losses.add_loss(tf.reduce_mean(spec_losses))
         losses['spec'] = spec_losses
