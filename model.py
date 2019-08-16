@@ -410,7 +410,7 @@ def model_fn(features, labels, mode, params, config):
       spec_output = slim.fully_connected(
           fuss_output,
           spec_bins,
-          activation_fn=tf.nn.relu,
+          activation_fn=tf.sigmoid,
           scope='spec_dynamic')
       '''
       spec_bins = 229
