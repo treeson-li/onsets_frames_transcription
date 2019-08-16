@@ -406,8 +406,8 @@ def model_fn(features, labels, mode, params, config):
         is_training=is_training,
         bidirectional=hparams.bidirectional)
 
-        spec_bins = 229
-        spec_output = slim.fully_connected(
+      spec_bins = 229
+      spec_output = slim.fully_connected(
           fuss_output,
           spec_bins,
           activation_fn=tf.nn.relu,
