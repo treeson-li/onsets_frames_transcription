@@ -389,13 +389,6 @@ def model_fn(features, labels, mode, params, config):
     with tf.variable_scope('spec'):
       fussion = tf.concat([onset_probs, offset_probs, frame_probs], axis=2)
       
-      # if no fc layer, lstm will have Nan value
-      fussion = slim.fully_connected(
-          fussion,
-          hparams.fussion_lstm_units*2,
-          activation_fn=tf.sigmoid,
-          scope='fussion')
-      
       fuss_output = lstm_layer(
         fussion,
         hparams.batch_size,
