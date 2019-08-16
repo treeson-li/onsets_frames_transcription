@@ -1,5 +1,5 @@
 TRAIN_EXAMPLES=/home/admin1/data/tfrecord/maps/maps_config2_train_spec.tfrecord
-RUN_DIR=~/data/self_template/
+RUN_DIR=~/data/self_template/ 
 
 CUDA_VISIBLE_DEVICES=3 nohup python ./onsets_frames_transcription_train.py \
 	  --examples_path="${TRAIN_EXAMPLES}" \
