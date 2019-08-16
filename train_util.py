@@ -91,6 +91,14 @@ def create_estimator(model_fn,
     keep_checkpoint_max=keep_checkpoint_max,
     keep_checkpoint_every_n_hours=2)
 
+  params = copy.deepcopy(hparams)
+  return tf.estimator.Estimator(model_fn=model_fn,
+                                  model_dir=model_dir,
+                                  config=config,
+                                  params=params,
+                                  warm_start_from=warm_start_from)
+
+
 
 def train(master,
           model_fn,
