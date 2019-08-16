@@ -73,31 +73,23 @@ def create_estimator(model_fn,
                      master='',
                      save_checkpoint_steps=50000,
                      save_summary_steps=50000,
-                     keep_checkpoint_max=None,
+                     keep_checkpoint_max=5,
                      warm_start_from=None):
   """Creates an estimator."""
-  config = tf.contrib.tpu.RunConfig(
-      tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=save_checkpoint_steps),
-      master=master,
-      save_summary_steps=save_summary_steps,
-      save_checkpoints_steps=save_checkpoint_steps,
-      keep_checkpoint_max=keep_checkpoint_max,
-      keep_checkpoint_every_n_hours=1)
-
-  params = copy.deepcopy(hparams)
-  params.del_hparam('batch_size')
-  return tf.contrib.tpu.TPUEstimator(
-      use_tpu=use_tpu,
-      model_fn=model_fn,
-      model_dir=model_dir,
-      params=params,
-      train_batch_size=hparams.batch_size,
-      eval_batch_size=hparams.batch_size,
-      predict_batch_size=hparams.batch_size,
-      config=config,
-      warm_start_from=warm_start_from,
-      eval_on_tpu=False)
+  NUM_GPUS = 1
+  if NUM_GPUS == 1:
+    mirrored_strategy = tf.contrib.distribute.OneDeviceStrategy(device='/gpu:2')
+  elif NUM_GPUS > 1:
+    mirrored_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=NUM_GPUS)
+  else:
+    mirrored_strategy = None
+  config = tf.estimator.RunConfig(
+    train_distribute=mirrored_strategy,
+    eval_distribute=mirrored_strategy,
+    save_summary_steps=save_summary_steps,
+    save_checkpoints_steps=save_checkpoint_steps,
+    keep_checkpoint_max=keep_checkpoint_max,
+    keep_checkpoint_every_n_hours=2)
 
 
 def train(master,
