@@ -393,7 +393,7 @@ def model_fn(features, labels, mode, params, config):
       fussion = slim.fully_connected(
           fussion,
           hparams.fussion_lstm_units*2,
-          activation_fn=tf.nn.relu,
+          activation_fn=tf.sigmoid,
           scope='fussion')
       
       fuss_output = lstm_layer(
