@@ -49,7 +49,7 @@ tf.app.flags.DEFINE_integer(
     'eval_num_steps', 10000,
     'Number of eval steps or `None` to go through all examples.')
 tf.app.flags.DEFINE_integer(
-    'keep_checkpoint_max', 10000,
+    'keep_checkpoint_max', 5,
     'Maximum number of checkpoints to keep in `train` mode or 0 for infinite.')
 tf.app.flags.DEFINE_string(
     'hparams', '',
