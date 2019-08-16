@@ -29,7 +29,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 
-init_uniform = tf.random_uniform_initializer(minval=0, maxval=0.01, seed=None, dtype=tf.float32)
+init_uniform = tf.random_uniform_initializer(minval=0, maxval=0.1, seed=None, dtype=tf.float32)
 
 def conv_net(inputs, hparams):
   """Builds the ConvNet from Kelz 2016."""
@@ -407,17 +407,10 @@ def model_fn(features, labels, mode, params, config):
         bidirectional=hparams.bidirectional)
 
       spec_bins = 229
-      spec_output = slim.fully_connected(
-          fuss_output,
-          spec_bins,
-          activation_fn=tf.sigmoid,
-          scope='spec_dynamic')
-      '''
-      spec_bins = 229
       spec_dynamic = slim.fully_connected(
           fuss_output,
           constants.MIDI_PITCHES * spec_bins,
-          activation_fn=tf.nn.relu,
+          activation_fn=tf.sigmoid,
           scope='spec_dynamic')
       
       dims = tf.shape(spec_dynamic)
@@ -425,8 +418,7 @@ def model_fn(features, labels, mode, params, config):
       key_template = tf.get_variable('template', shape=[constants.MIDI_PITCHES, spec_bins], initializer=init_uniform)
       spec_output = tf.multiply(spec_dynamic, key_template)
       spec_output = tf.reduce_sum(spec_output, axis=2)
-      #spec_output = tf.layers.batch_normalization(spec_output, axis=2, training=is_training)
-      '''
+      spec_output = tf.sigmoid(spec_output, name="spec_output")
       
       # spec_out_flat is not used during inference.
       if is_training:
