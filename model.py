@@ -413,9 +413,9 @@ def model_fn(features, labels, mode, params, config):
       spec_output = tf.reduce_sum(spec_output, axis=2)
       spec_output = tf.sigmoid(spec_output, name="spec_output")
       
+      spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
       # spec_out_flat is not used during inference.
-      if is_training:
-        spec_out_flat = flatten_maybe_padded_sequences(spec_output, length)
+      if is_training:        
         spec_labels_flat = flatten_maybe_padded_sequences(spec, length)
         spec_labels_flat = tf.reshape(spec_out_flat, (-1, spec_bins))
         spec_losses = tf_utils.log_loss(spec_labels_flat, spec_out_flat)

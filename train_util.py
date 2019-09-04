@@ -78,7 +78,7 @@ def create_estimator(model_fn,
   """Creates an estimator."""
   NUM_GPUS = 1
   if NUM_GPUS == 1:
-    mirrored_strategy = tf.contrib.distribute.OneDeviceStrategy(device='/gpu:2')
+    mirrored_strategy = tf.contrib.distribute.OneDeviceStrategy(device='/gpu:3')
   elif NUM_GPUS > 1:
     mirrored_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=NUM_GPUS)
   else:
@@ -91,6 +91,7 @@ def create_estimator(model_fn,
     keep_checkpoint_max=keep_checkpoint_max,
     keep_checkpoint_every_n_hours=2)
 
+  config.allow_growth = True
   params = copy.deepcopy(hparams)
   return tf.estimator.Estimator(model_fn=model_fn,
                                   model_dir=model_dir,
