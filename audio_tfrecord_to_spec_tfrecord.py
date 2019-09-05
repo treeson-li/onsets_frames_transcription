@@ -26,7 +26,7 @@ print(iterator)
 print(next_record)
 
 writer = tf.io.TFRecordWriter(spec_tfrecord, options=None)
-exit
+
 with tf.io.TFRecordWriter(spec_tfrecord) as writer:
     with tf.Session() as sess:
         sess.run(iterator.initializer)
