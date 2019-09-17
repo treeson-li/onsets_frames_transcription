@@ -247,6 +247,65 @@ def AAN_decoder(spec, labels, params, is_training=True):
 
     return decoder_outputs
 
+def sparse_encoder(inputs, bias, params, dtype=None, scope=None, is_training=True):
+    with tf.variable_scope(scope, default_name="sparse_encoder", dtype=dtype,
+                           values=[inputs, bias]):
+        x = inputs
+        for layer in range(params.num_encoder_layers):
+            with tf.variable_scope("layer_%d" % layer):
+                with tf.variable_scope("self_attention"):
+                    y = layers.attention.multihead_attention(
+                        layer_process(x, params.layer_preprocess),
+                        None,
+                        bias,
+                        params.num_heads,
+                        params.attention_key_channels or params.hidden_size,
+                        params.attention_value_channels or params.hidden_size,
+                        params.hidden_size,
+                        1.0 - params.attention_dropout,
+                        cxt = params.local_cxt,
+                        is_training=is_training,
+                        params=params,
+                    )
+                    y = y["outputs"]
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout, is_training=is_training)
+                    x = layer_process(x, params.layer_postprocess)
+
+                with tf.variable_scope("feed_forward"):
+                    y = ffn_layer(
+                        layer_process(x, params.layer_preprocess),
+                        params.ffn_filter_size,
+                        params.hidden_size,
+                        1.0 - params.relu_dropout,
+                    )
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout, is_training=is_training)
+                    x = layer_process(x, params.layer_postprocess)
+
+        outputs = layer_process(x, params.layer_preprocess)
+
+        return outputs
+
+def sparse_transformer(spec, labels, params, is_training=True):
+
+    hidden_size = params.aan_size
+    
+    # concat spectrum and labels(no longer yet) as decoder input
+    dec_input = slim.fully_connected(spec, hidden_size, scope='spec_dec_input')
+    dec_input = slim.dropout(dec_input, 1-params.residual_dropout, is_training=is_training, scope='dec_input_dropout')
+
+    # Preparing decoder input
+    # This is a lazy implementation, to assign the correct position embedding, I simply copy the
+    # current decoder input 'given_position' times, and assign the whole position embeddings,
+    # Only the last decoding value has the meaningful position embeddings
+    # TODO: sparse Attention Network(local context), Decoder side position embedding may be unnecessary 
+    decoder_input = layers.attention.add_timing_signal(dec_input)
+
+    keep_prob = 1.0 - params.residual_dropout
+    decoder_input = slim.dropout(decoder_input, keep_prob, is_training=is_training, scope='dec_input_dropout')
+
+    decoder_outputs = sparse_encoder(decoder_input, None, params, is_training=is_training)
+
+    return decoder_outputs
 
 def model_graph(features, labels, mode, params, given_memory=None, given_src_mask=None, given_decoder=None, given_position=None):
     hidden_size = params.hidden_size

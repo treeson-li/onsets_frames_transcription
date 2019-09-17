@@ -65,7 +65,7 @@ def _trial_summary(hparams, model_dir, examples_path, output_dir):
     writer.add_summary(hparam_summary.eval())
     writer.close()
 
-
+'''
 def create_estimator(model_fn,
                      model_dir,
                      hparams,
@@ -97,6 +97,39 @@ def create_estimator(model_fn,
                                   config=config,
                                   params=params,
                                   warm_start_from=warm_start_from)
+'''
+def create_estimator(model_fn,
+                     model_dir,
+                     hparams,
+                     use_tpu=False,
+                     master='',
+                     save_checkpoint_steps=50000,
+                     save_summary_steps=50000,
+                     keep_checkpoint_max=5,
+                     warm_start_from=None):
+  """Creates an estimator."""
+  config = tf.contrib.tpu.RunConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
+          iterations_per_loop=save_checkpoint_steps),
+      master=master,
+      save_summary_steps=save_summary_steps,
+      save_checkpoints_steps=save_checkpoint_steps,
+      keep_checkpoint_max=keep_checkpoint_max,
+      keep_checkpoint_every_n_hours=2)
+
+  params = copy.deepcopy(hparams)
+  params.del_hparam('batch_size')
+  return tf.contrib.tpu.TPUEstimator(
+      use_tpu=use_tpu,
+      model_fn=model_fn,
+      model_dir=model_dir,
+      params=params,
+      train_batch_size=hparams.batch_size,
+      eval_batch_size=hparams.batch_size,
+      predict_batch_size=hparams.batch_size,
+      config=config,
+      warm_start_from=warm_start_from,
+      eval_on_tpu=False)
 
 
 def train(master,
