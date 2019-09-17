@@ -44,6 +44,9 @@ import numpy as np
 import scipy
 import tensorflow as tf
 
+import xlwt
+xls = xlwt.Workbook()
+sheet1 = xls.add_sheet('Sheet1')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -51,15 +54,15 @@ tf.app.flags.DEFINE_string('master', '',
                            'Name of the TensorFlow runtime to use.')
 tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
-tf.app.flags.DEFINE_string('model_dir', None, 'Path to look for checkpoints.')
+tf.app.flags.DEFINE_string('model_dir', '/home/admin1/data/google_model/', 'Path to look for checkpoints.')
 tf.app.flags.DEFINE_string(
-    'checkpoint_path', '~/data/onsets_frames_ori',
+    'checkpoint_path', None,
     'Filename of the checkpoint to use. If not specified, will use the latest '
     'checkpoint')
-tf.app.flags.DEFINE_string('examples_path', '/media/admin1/Windows/MAPS_TFRECORD/maps_config2_test.tfrecord',
+tf.app.flags.DEFINE_string('examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_test_spec.tfrecord',#'/media/admin1/Windows/MAPS_TFRECORD/maps_config2_test.tfrecord',
                            'Path to test examples TFRecord.')
 tf.app.flags.DEFINE_string(
-    'output_dir', '~/tmp/onsets_frames/infer',
+    'output_dir', '/home/admin1/data/google_model/infer',
     'Path to store output midi files and summary events.')
 tf.app.flags.DEFINE_string(
     'hparams', '',
@@ -115,7 +118,7 @@ def model_inference(model_fn,
 
     dataset = data.provide_batch(
         examples=examples_path,
-        preprocess_examples=True,
+        preprocess_examples=False,
         hparams=hparams,
         is_training=False)
 
@@ -150,6 +153,7 @@ def model_inference(model_fn,
       num_frames = []
 
       sess.run(iterator.initializer)
+      whileIndex = 0
       while True:
         try:
           record = sess.run(next_record)
@@ -241,7 +245,10 @@ def model_inference(model_fn,
             sequence_prediction=sequence_prediction,
             frames_per_second=data.hparams_frames_per_second(hparams),
             sequence_label=sequence_label,
-            sequence_id=filename)
+            sequence_id=filename,
+            index=whileIndex,
+            sheet=sheet1)
+        whileIndex += 1
 
         if write_summary_every_step:
           # Make filenames UNIX-friendly.
@@ -275,6 +282,7 @@ def model_inference(model_fn,
           summary_writer.add_summary(summary, sess.run(global_step))
           summary_writer.flush()
 
+      xls.save('results-gg.xls')#xls.save('results-uni.xls')
       if not write_summary_every_step:
         # Only write the summary variables for the final step.
         summary = sess.run(summary_op)

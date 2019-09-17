@@ -35,11 +35,11 @@ tf.app.flags.DEFINE_string(
     'examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_train_spec.tfrecord',
     'Path to a TFRecord file of train/eval examples.')
 tf.app.flags.DEFINE_boolean(
-    'preprocess_examples', False,
+    'preprocess_examples', False, 
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/data/onsets_frames_orig/',
+    'model_dir', '~/data/orig1direction/', 
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')
@@ -49,7 +49,7 @@ tf.app.flags.DEFINE_integer(
     'eval_num_steps', 10000,
     'Number of eval steps or `None` to go through all examples.')
 tf.app.flags.DEFINE_integer(
-    'keep_checkpoint_max', 10000,
+    'keep_checkpoint_max', 5,
     'Maximum number of checkpoints to keep in `train` mode or 0 for infinite.')
 tf.app.flags.DEFINE_string(
     'hparams', '',

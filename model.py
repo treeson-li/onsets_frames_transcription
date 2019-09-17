@@ -475,5 +475,5 @@ def get_default_hparams():
       use_lengths=False,
       use_cudnn=True,
       rnn_dropout_drop_amt=0.0,
-      bidirectional=True,
+      bidirectional=True#False,
   )
