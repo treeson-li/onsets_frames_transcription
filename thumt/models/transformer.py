@@ -254,7 +254,7 @@ def sparse_encoder(inputs, bias, params, dtype=None, scope=None, is_training=Tru
         for layer in range(params.num_encoder_layers):
             with tf.variable_scope("layer_%d" % layer):
                 with tf.variable_scope("self_attention"):
-                    y = layers.attention.multihead_attention(
+                    y = layers.attention.multihead_sparse_attention(
                         layer_process(x, params.layer_preprocess),
                         None,
                         bias,

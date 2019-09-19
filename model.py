@@ -480,7 +480,7 @@ def get_default_hparams():
     hyperparameters for the model.
   """
   return tf.contrib.training.HParams(
-      batch_size=1,
+      batch_size=2,
       learning_rate=0.0006,
       decay_steps=10000,
       decay_rate=0.98,
@@ -522,7 +522,7 @@ def get_default_hparams():
       layer_preprocess="none",
       layer_postprocess="layer_norm",
 
-      num_encoder_layers=6,
+      num_encoder_layers=4,
       num_heads = 8,
       ffn_filter_size=512,
       hidden_size = 256,

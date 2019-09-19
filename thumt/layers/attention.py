@@ -301,8 +301,6 @@ def multiplicative_attention(queries, keys, values, bias, keep_prob=None,
     with tf.name_scope(name, default_name="multiplicative_attention",
                        values=[queries, keys, values, bias]):
         # shape: [batch, heads, length_q, length_kv]
-        print('queries :', queries)
-        print('keys :', keys)
         logits = tf.matmul(queries, keys, transpose_b=True)
 
         if bias is not None:
@@ -320,7 +318,7 @@ def multiplicative_attention(queries, keys, values, bias, keep_prob=None,
 
 def multihead_attention(queries, memories, bias, num_heads, key_size,
                         value_size, output_size, keep_prob=None, output=True,
-                        dtype=None, scope=None, cxt=None, is_training=True, params=None):
+                        dtype=None, scope=None, is_training=True):
     """ Multi-head scaled-dot-product attention with input/output
         transformations.
 
@@ -364,14 +362,9 @@ def multihead_attention(queries, memories, bias, num_heads, key_size,
             k, v = tf.split(combined, [key_size, value_size], axis=-1)
 
         # split heads
-        if cxt==None:
-            q = split_heads(q, num_heads)
-            k = split_heads(k, num_heads)
-            v = split_heads(v, num_heads)
-        else:
-            q = split_heads(q, num_heads, mode='local_q', params=params)
-            k = split_heads(k, num_heads, mode='local_kv', cxt=cxt, params=params)
-            v = split_heads(v, num_heads, mode='local_kv', cxt=cxt, params=params)
+        q = split_heads(q, num_heads)
+        k = split_heads(k, num_heads)
+        v = split_heads(v, num_heads)
 
         # scale query
         key_depth_per_head = key_size // num_heads
@@ -380,13 +373,160 @@ def multihead_attention(queries, memories, bias, num_heads, key_size,
         # attention
         results = multiplicative_attention(q, k, v, bias, keep_prob, is_training=is_training)
 
-        if cxt > 0:
-            results["weights"] = tf.squeeze(results["weights"], squeeze_dims=3)
-            results["outputs"] = tf.squeeze(results["outputs"], squeeze_dims=3)
-
         # combine heads 
         weights = results["weights"]
         x = combine_heads(results["outputs"])
+
+        if output:
+            outputs = linear(x, output_size, True, True,
+                             scope="output_transform")
+        else:
+            outputs = x
+
+        return {"weights": weights, "outputs": outputs}
+
+def get_position_context(inputs, cxt, idx, len, params, mode, name=None):
+    with tf.name_scope(name, default_name="get_position_context", values=[inputs, cxt]):
+
+        if inputs == None:
+            return None
+        s = tf.shape(inputs)
+#        print('-'*50)
+#        print('inputs shape', s)
+#        print('idx, len', idx, len)
+        if mode == 'cxt_qb':
+            x = tf.slice(inputs, [0, 0, idx, 0], [s[0], s[1], len, s[3]])
+            x = tf.expand_dims(x, axis=3)
+            return  x
+
+        if mode is not 'cxt_kv':
+            return None
+
+        zeros = tf.zeros([s[0], s[1], cxt-1, s[3]], dtype=tf.float32)
+        x0 = tf.concat([zeros, inputs], axis=2)
+        dim = int(params.hidden_size / params.num_heads)
+
+        def cond(i, x):
+            return tf.less(i, len)
+
+        def body(i, x):
+            sliced = tf.slice(x0, [0, 0, idx+i, 0], [params.batch_size, params.num_heads, cxt, dim])
+            sliced = tf.expand_dims(sliced, axis=2)
+            x = tf.cond(tf.equal(i, 0),
+                        lambda: sliced,
+                        lambda: tf.concat([x, sliced], axis=2))
+            i = tf.add(i, 1)
+            return  i, x
+
+        x = tf.zeros([params.batch_size, params.num_heads, 1, cxt, dim], dtype=tf.float32, name='concat_pos_context')
+        i = tf.constant(0, dtype=tf.int32)
+        i, x = tf.while_loop(cond, body, loop_vars=[i, x],
+            shape_invariants=[i.get_shape(), tf.TensorShape([params.batch_size, params.num_heads, None, cxt, dim])])
+
+        return x
+
+def multihead_sparse_attention(queries, memories, bias, num_heads, key_size,
+                        value_size, output_size, keep_prob=None, output=True,
+                        dtype=None, scope=None, cxt=None, is_training=True, params=None):
+    """ Multi-head scaled-dot-product attention with input/output
+        transformations.
+
+    :param queries: A tensor with shape [batch, length_q, depth_q] if
+    :param memories: A tensor with shape [batch, length_m, depth_m]
+    :param bias: A tensor (see attention_bias)
+    :param num_heads: An integer dividing key_size and value_size
+    :param key_size: An integer
+    :param value_size: An integer
+    :param output_size: An integer
+    :param keep_prob: A floating point number in (0, 1]
+    :param output: Whether to use output transformation
+    :param dtype: An optional instance of tf.DType
+    :param scope: An optional string
+
+    :returns: A dict with the following keys:
+        weights: A tensor with shape [batch, length_q]
+        outputs: A tensor with shape [batch, length_q, depth_v]
+    """
+
+    if key_size % num_heads != 0:
+        raise ValueError("Key size (%d) must be divisible by the number of "
+                         "attention heads (%d)." % (key_size, num_heads))
+
+    if value_size % num_heads != 0:
+        raise ValueError("Value size (%d) must be divisible by the number of "
+                         "attention heads (%d)." % (value_size, num_heads))
+
+    with tf.variable_scope(scope, default_name="multihead_sparse_attention",
+                           values=[queries, memories], dtype=dtype):
+        if memories is None:
+            # self attention
+            size = key_size * 2 + value_size
+            combined = linear(queries, size, True, True, scope="qkv_transform")
+            q, k, v = tf.split(combined, [key_size, key_size, value_size],
+                               axis=-1)
+        else:
+            q = linear(queries, key_size, True, True, scope="q_transform")
+            combined = linear(memories, key_size + value_size, True,
+                              scope="kv_transform")
+            k, v = tf.split(combined, [key_size, value_size], axis=-1)
+
+        # split heads
+        q = split_heads(q, num_heads)
+        k = split_heads(k, num_heads)
+        v = split_heads(v, num_heads)
+
+        # scale query
+        key_depth_per_head = key_size // num_heads
+        q *= key_depth_per_head ** -0.5
+
+        block_num = cxt
+
+        def get_sliced_qkv(q, k, v, bias, idx, num):
+            # q, k, v shape [batch, head, length, dim]
+            shape = tf.shape(q)
+            length = shape[2]
+            width = tf.cast(tf.ceil(tf.divide(length, num)), tf.int32)
+            start = width * idx
+            width = tf.cond(tf.less(idx, num-1),
+                            lambda: width,
+                            lambda: length - width * (num-1))
+            q1 = get_position_context(q, cxt, start, width, params, mode='cxt_qb')
+            k1 = get_position_context(k, cxt, start, width, params, mode='cxt_kv')
+            v1 = get_position_context(v, cxt, start, width, params, mode='cxt_kv')
+            b1 = get_position_context(bias, cxt, start, width, params, mode='cxt_qb')
+
+            return  q1, k1, v1, b1
+            
+
+        def cond(weights, outputs, i):
+            return tf.less(i, block_num)
+
+        def body(weights, outputs, i):
+            q1, k1, v1, bias1 = get_sliced_qkv(q, k, v, bias, i, block_num)
+            
+            # attention
+            results = multiplicative_attention(q1, k1, v1, bias1, keep_prob, is_training=is_training)
+
+            wt = tf.squeeze(results["weights"], squeeze_dims=3)
+            ot = tf.squeeze(results["outputs"], squeeze_dims=3)
+            weights = tf.cond(tf.equal(i, 0),
+                        lambda: wt,
+                        lambda: tf.concat([weights, wt], axis=2))
+            outputs = tf.cond(tf.equal(i, 0),
+                        lambda: ot,
+                        lambda: tf.concat([outputs, ot], axis=2))
+            i = i + 1
+            return weights, outputs, i
+
+        weights = tf.zeros([params.batch_size, params.num_heads, 1, cxt], dtype=tf.float32)
+        outputs = tf.zeros([params.batch_size, params.num_heads, 1, params.hidden_size//params.num_heads], dtype=tf.float32)
+        i = tf.constant(0, dtype=tf.int32)
+        weights, outputs, i = tf.while_loop(cond, body, loop_vars=[weights, outputs, i],
+                            shape_invariants = [tf.TensorShape([params.batch_size, params.num_heads, None, cxt]), 
+                                                tf.TensorShape([params.batch_size, params.num_heads, None, params.hidden_size//params.num_heads]), 
+                                                i.get_shape()])
+        # combine heads 
+        x = combine_heads(outputs)
 
         if output:
             outputs = linear(x, output_size, True, True,
