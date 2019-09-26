@@ -179,7 +179,7 @@ def attention_method(enc_hidden, enc_output, inputs, labels, num_units, batch_si
     dec_hidden = enc_hidden
     decoder = attention.Decoder(num_units, batch_size, att_frames)
     outputs = tf.zeros([1, batch_size, num_units])
-    t, outputs, _ = tf.while_loop(condition, body, loop_vars=[t, outputs, dec_hidden], 
+    t, outputs, _ = tf.while_loop(condition, body, loop_vars=[t, outputs, dec_hidden], #parallel_iterations=100,
         shape_invariants=[t.get_shape(), tf.TensorShape([None, None, num_units]), tf.TensorShape([None, num_units])])
   #  outputs = tf.slice(outputs, [1, 0, 0], [tf.shape(outputs)[0]-1, batch_size, num_units])
 
@@ -585,6 +585,8 @@ def model_fn(features, labels, mode, params, config):
       loss_label = 'losses/' + label
       tf.summary.scalar(loss_label, tf.reduce_mean(loss_collection))
 
+    logging_hook = tf.train.LoggingTensorHook({"loss" : loss, 'global_step' : tf.train.get_or_create_global_step()}, every_n_iter=10)
+
     train_op = tf.contrib.layers.optimize_loss(
         name='training',
         loss=loss,
@@ -598,9 +600,13 @@ def model_fn(features, labels, mode, params, config):
         clip_gradients=hparams.clip_norm,
         optimizer='Adam')
 
-  return tf.estimator.EstimatorSpec(
-      mode=mode, predictions=predictions, loss=loss, train_op=train_op)
+    return tf.estimator.EstimatorSpec(
+      mode=mode, predictions=predictions, loss=loss, train_op=train_op,
+      training_hooks = [logging_hook])
 
+  else:
+    return tf.estimator.EstimatorSpec(
+      mode=mode, predictions=predictions, loss=loss, train_op=train_op)
 
 def get_default_hparams():
   """Returns the default hyperparameters.
@@ -610,7 +616,7 @@ def get_default_hparams():
     hyperparameters for the model.
   """
   return tf.contrib.training.HParams(
-      batch_size=2,
+      batch_size=6,
       learning_rate=0.0006,
       decay_steps=10000,
       decay_rate=0.98,
@@ -639,5 +645,5 @@ def get_default_hparams():
       use_lengths=True,
       use_cudnn=True,
       rnn_dropout_drop_amt=0.0,
-      bidirectional=True,
+      bidirectional=False#True,
   )
