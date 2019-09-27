@@ -28,6 +28,8 @@ import constants
 import copy
 import configs
 
+import thumt.layers.attention as transformer_att
+
 import attention
 
 
@@ -336,25 +338,17 @@ def attention_model(inputs, hparams, lstm_units, lengths,
   else:
     return conv_output
 
-def encoder_prepare(lstm_units, batch_size, labels, lengths, bidirectional):
+def encoder_prepare(inputs, lstm_units, lengths, is_training, params):
   ''' prepare encoder for attention '''
-  encoder_fw = attention.Encoder(lstm_units, batch_size)
-  enc_hidden_fw = encoder_fw.initialize_hidden_state()
-  print("shape of labels:", labels.shape)
-  enc_output_fw, enc_hidden_fw = encoder_fw(labels, enc_hidden_fw)
-  enc_output = [enc_output_fw]
-  enc_hidden = [enc_hidden_fw]
-  labels_reversed = tf.reverse_sequence(labels, lengths, seq_axis=1, batch_axis=0)
-  print("shape of reverse labels:", labels_reversed.shape)
-  if bidirectional:
-    encoder_bw = attention.Encoder(lstm_units, batch_size)
-    enc_hidden_bw = encoder_bw.initialize_hidden_state()
-    enc_output_bw, enc_hidden_bw = encoder_bw(labels_reversed, enc_hidden_bw)
-
-    enc_output.append(enc_output_bw)
-    enc_hidden.append(enc_hidden_bw)
+  enc_output = lstm_layer(inputs, params.batch_size, lstm_units, 
+                      lengths=length if params.use_lengths else None,
+                      use_cudnn=params.use_cudnn, 
+                      rnn_dropout_drop_amt=params.rnn_dropout_drop_amt, 
+                      stack_size=params.encoder_rnn_stack_size,
+                      is_training=is_training,
+                      bidirectional=True)
     
-  return enc_output, enc_hidden
+  return enc_output
 
 def model_fn(features, labels, mode, params, config):
   """Builds the acoustic model."""
@@ -381,20 +375,22 @@ def model_fn(features, labels, mode, params, config):
   losses = {}
   with slim.arg_scope([slim.batch_norm, slim.dropout], is_training=is_training):
     with tf.variable_scope('onsets'):
-      enc_output, enc_hidden = encoder_prepare(hparams.onset_lstm_units, 
-                                                hparams.batch_size,
-                                                onset_labels,
-                                                length,
-                                                hparams.bidirectional)
+      onset_label_enc = encoder_prepare(onset_labels,
+                                  hparams.onset_lstm_units,
+                                  lengths=length,
+                                  is_training=is_training,
+                                  params=hparams)
       
-      onset_outputs = attention_model(spec,
-                                      hparams,
-                                      lstm_units=hparams.onset_lstm_units,
-                                      lengths=length,
-                                      enc_output=enc_output,
-                                      enc_hidden=enc_hidden,
-                                      labels=onset_labels,
-                                      is_training=is_training)
+      spec_enc_4onset = acoustic_model(spec, hparams, hparams.spec_lstm_units, length, is_training)
+      onset_outputs = transformer_att.sparse_multihead_attention(
+                                  queries=spec_enc_4onset,
+                                  memories=onset_label_enc,
+                                  num_heads=params.num_heads,
+                                  key_size=params.onset_lstm_units,
+                                  value_size=params.onset_lstm_units,
+                                  output_size=params.onset_lstm_units,
+                                  keep_prob=1-params.att_dropout,
+                                  scope='onset_attention')
       onset_probs = slim.fully_connected(
                                       onset_outputs,
                                       constants.MIDI_PITCHES,
@@ -409,12 +405,21 @@ def model_fn(features, labels, mode, params, config):
         tf.losses.add_loss(tf.reduce_mean(onset_losses))
         losses['onset'] = onset_losses
     with tf.variable_scope('offsets'):
-      offset_outputs = acoustic_model(
-          spec,
-          hparams,
-          lstm_units=hparams.offset_lstm_units,
-          lengths=length,
-          is_training=is_training)
+      offset_lable_enc = encoder_prepare(offset_labels,
+                                  hparams.offset_lstm_units,
+                                  lengths=length,
+                                  is_training=is_training,
+                                  params=hparams)
+      spec_enc_4offsets = acoustic_model(spec, hparams, lstm_units=hparams.offset_lstm_units, lengths=length, is_training=is_training)
+      offset_outputs = transformer_att.sparse_multihead_attention(
+                                  queries=spec_enc_4offsets,
+                                  memories=offset_lable_enc,
+                                  num_heads=params.num_heads,
+                                  key_size=params.offset_lstm_units,
+                                  value_size=params.offset_lstm_units,
+                                  output_size=params.offset_lstm_units,
+                                  keep_prob=1-params.att_dropout,
+                                  scope='offset_attention')
       offset_probs = slim.fully_connected(
           offset_outputs,
           constants.MIDI_PITCHES,
@@ -494,27 +499,31 @@ def model_fn(features, labels, mode, params, config):
       combined_probs = tf.concat(probs, 2)
 
       if hparams.combined_lstm_units > 0:
-        enc_output, enc_hidden = encoder_prepare(hparams.combined_lstm_units, 
-                                                hparams.batch_size,
-                                                frame_label_weights,
-                                                length,
-                                                hparams.bidirectional)
-        outputs = attention_gru_layer(
-            combined_probs,
-            hparams.batch_size,
-            hparams.combined_lstm_units,
-            enc_output,
-            enc_hidden,
-            frame_label_weights,
-            lengths=length if hparams.use_lengths else None,
-            stack_size=hparams.combined_rnn_stack_size,
-            is_training=is_training,
-            bidirectional=hparams.bidirectional)
+        frame_label_enc = encoder_prepare(frame_label_weights,
+                                  hparams.combined_lstm_units,                                                
+                                  length,
+                                  is_training=is_training,
+                                  params=hparams)
+        frame_query_enc = encoder_prepare(
+                                  combined_probs,
+                                  hparams.combined_lstm_units,
+                                  lengths=length,
+                                  is_training=is_training,
+                                  params=hparams)
+        frame_outputs = transformer_att.sparse_multihead_attention(
+                                  queries=frame_query_enc,
+                                  memories=frame_label_enc,
+                                  num_heads=params.num_heads,
+                                  key_size=params.combined_lstm_units,
+                                  value_size=params.combined_lstm_units,
+                                  output_size=params.combined_lstm_units,
+                                  keep_prob=1-params.att_dropout,
+                                  scope='frame_attention')  
       else:
-        outputs = combined_probs
+        frame_outputs = combined_probs
 
       frame_probs = slim.fully_connected(
-          outputs,
+          frame_outputs,
           constants.MIDI_PITCHES,
           activation_fn=tf.sigmoid,
           scope='frame_probs')
@@ -616,12 +625,13 @@ def get_default_hparams():
     hyperparameters for the model.
   """
   return tf.contrib.training.HParams(
-      batch_size=6,
+      batch_size=8,
       learning_rate=0.0006,
       decay_steps=10000,
       decay_rate=0.98,
       clip_norm=3.0,
       transform_audio=True,
+      spec_lstm_units=256,
       onset_lstm_units=256,
       offset_lstm_units=256,
       velocity_lstm_units=0,
@@ -629,6 +639,7 @@ def get_default_hparams():
       combined_lstm_units=256,
       acoustic_rnn_stack_size=1,
       combined_rnn_stack_size=1,
+      encoder_rnn_stack_size=1,
       activation_loss=False,
       stop_activation_gradient=False,
       stop_onset_gradient=True,
@@ -642,8 +653,10 @@ def get_default_hparams():
       dropout_keep_amts=[1.0, 0.25, 0.25],
       fc_size=768,
       fc_dropout_keep_amt=0.5,
-      use_lengths=True,
+      use_lengths=False,
       use_cudnn=True,
       rnn_dropout_drop_amt=0.0,
-      bidirectional=False#True,
+      bidirectional=True,
+      num_heads=8,
+      att_dropout=0.1,
   )
