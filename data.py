@@ -390,6 +390,7 @@ def _provide_data(input_tensors, hparams, is_training):
     # In this case, it is min(hparams.truncated_length, length)
     final_length = truncated_length
 
+  final_length = (final_length // 4 + 1) * 4
   spec_delta = tf.shape(spec)[0] - final_length
   spec = tf.case(
       [(spec_delta < 0,

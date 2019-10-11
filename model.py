@@ -194,13 +194,16 @@ def AAN_layer(inputs, labels, params, is_training=True):
   """Create a Average Attention Network layer."""
   return transformer.AAN_decoder(inputs, labels, params, is_training)
 
-
+def self_attention_layer(inputs, labels, params, is_training=True):
+  """Create self sparse Attention Network layer."""
+  return transformer.sparse_self_attention(inputs, labels, params, is_training)
+  
 def acoustic_model(inputs, hparams, lstm_units, lengths, labels=None, is_training=True, use_transformer=False):
   """Acoustic model that handles all specs for a sequence in one window."""
   conv_output = conv_net(inputs, hparams)
 
   if use_transformer:
-    return AAN_layer(conv_output, labels, hparams, is_training)
+    return self_attention_layer(conv_output, labels, hparams, is_training)
 
   if lstm_units:
     return lstm_layer(
@@ -357,7 +360,7 @@ def model_fn(features, labels, mode, params, config):
       combined_probs = tf.concat(probs, 2)
 
       if hparams.use_transformer:
-        outputs = AAN_layer(combined_probs, frame_labels, hparams, is_training=is_training)
+        outputs = self_attention_layer(combined_probs, frame_labels, hparams, is_training=is_training)
 
       else:
         if hparams.combined_lstm_units > 0:
@@ -445,6 +448,8 @@ def model_fn(features, labels, mode, params, config):
       loss_label = 'losses/' + label
       tf.summary.scalar(loss_label, tf.reduce_mean(loss_collection))
 
+    logging_hook = tf.train.LoggingTensorHook({"loss" : loss, 'global_step' : tf.train.get_or_create_global_step()}, every_n_iter=10)
+
     train_op = tf.contrib.layers.optimize_loss(
         name='training',
         loss=loss,
@@ -458,7 +463,12 @@ def model_fn(features, labels, mode, params, config):
         clip_gradients=hparams.clip_norm,
         optimizer='Adam')
 
-  return tf.estimator.EstimatorSpec(
+    return tf.estimator.EstimatorSpec(
+      mode=mode, predictions=predictions, loss=loss, train_op=train_op,
+      training_hooks = [logging_hook])
+
+  else:
+    return tf.estimator.EstimatorSpec(
       mode=mode, predictions=predictions, loss=loss, train_op=train_op)
 
 
@@ -470,7 +480,7 @@ def get_default_hparams():
     hyperparameters for the model.
   """
   return tf.contrib.training.HParams(
-      batch_size=6,
+      batch_size=8,
       learning_rate=0.0006,
       decay_steps=10000,
       decay_rate=0.98,
@@ -507,9 +517,16 @@ def get_default_hparams():
       avg_len=45,
       residual_dropout=0.1,
       relu_dropout=0.0,
-      num_decoder_layers=4,
-      use_ffn=True,
-      ffn_filter_size=512,
-      layer_preprocess="none",
-      layer_postprocess="layer_norm"      
+      num_decoder_layers=4,#6,#
+      use_ffn=True,#False,#
+      ffn_filter_size=2048,#512,#
+      layer_preprocess="layer_norm",
+      layer_postprocess="layer_norm",
+      num_heads=4,#8,#
+      hidden_size=256,
+      attention_key_channels=None,
+      attention_value_channels=None,
+      attention_dropout=0.1,
+      filter_size=512
+
   )

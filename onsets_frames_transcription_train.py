@@ -39,7 +39,7 @@ tf.app.flags.DEFINE_boolean(
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/data/aanNoCatLabel/',  
+    'model_dir', '~/data/sparse_cxt32stride4ffn2048/',#sparse_cxt128ffn512head4layer6', #sparse_cxt128ffn512', #'~/data/sparse_gate/',#
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')

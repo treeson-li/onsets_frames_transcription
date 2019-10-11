@@ -54,7 +54,7 @@ tf.app.flags.DEFINE_string('master', '',
                            'Name of the TensorFlow runtime to use.')
 tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
-tf.app.flags.DEFINE_string('model_dir', '/home/admin1/data/aanNoCatLabel/', 'Path to look for checkpoints.')
+tf.app.flags.DEFINE_string('model_dir', '/home/admin1/data/sparse_cxt128ffn512/', 'Path to look for checkpoints.')
 tf.app.flags.DEFINE_string(
     'checkpoint_path', None,
     'Filename of the checkpoint to use. If not specified, will use the latest '
@@ -62,7 +62,7 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_string('examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_test_spec.tfrecord',
                            'Path to test examples TFRecord.')
 tf.app.flags.DEFINE_string(
-    'output_dir', '/home/admin1/data/aanNoCatLabel/infer',
+    'output_dir', '/home/admin1/data/sparse_cxt128ffn512/infer',
     'Path to store output midi files and summary events.')
 tf.app.flags.DEFINE_string(
     'hparams', '',
@@ -77,7 +77,7 @@ tf.app.flags.DEFINE_float(
     'offset_threshold', 0.5,
     'Threshold to use when sampling from the acoustic model.')
 tf.app.flags.DEFINE_integer(
-    'max_seconds_per_sequence', None,
+    'max_seconds_per_sequence', 300,
     'If set, will truncate sequences to be at most this many seconds long.')
 tf.app.flags.DEFINE_boolean(
     'require_onset', True,

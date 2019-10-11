@@ -325,6 +325,15 @@ def posterior_pianoroll_image(frame_probs, sequence_prediction,
         # Truncate transcribed frames.
         frame_predictions = frame_predictions[:frame_labels.shape[0], :]
 
+    if frame_probs.shape[0] < frame_labels.shape[0]:
+        # Pad transcribed frames with silence.
+        pad_length = frame_labels.shape[0] - frame_probs.shape[0]
+        frame_probs = np.pad(
+            frame_probs, [(0, pad_length), (0, 0)], 'constant')
+    elif frame_probs.shape[0] > frame_labels.shape[0]:
+        # Truncate transcribed frames.
+        frame_probs = frame_probs[:frame_labels.shape[0], :]
+
     pianoroll_img = np.zeros([len(frame_probs), 3 * len(frame_probs[0]), 3])
 
     if overlap:

@@ -247,6 +247,100 @@ def AAN_decoder(spec, labels, params, is_training=True):
 
     return decoder_outputs
 
+def sparse_gate_encoder(inputs, params, dtype=None, scope=None, is_training=True):
+    with tf.variable_scope(scope, default_name="sparse_encoder", dtype=dtype,
+                           values=[inputs]):
+        x = inputs
+        for layer in range(params.num_decoder_layers):
+            with tf.variable_scope("layer_%d" % layer):
+                with tf.variable_scope("self_attention"):
+                    x_att = layers.attention.sparse_multihead_attention(
+                        layer_process(x, params.layer_preprocess),
+                        None,
+                        params.num_heads,
+                        params.attention_key_channels or params.hidden_size,
+                        params.attention_value_channels or params.hidden_size,
+                        params.hidden_size,
+                        1.0 - params.attention_dropout,
+                    )
+                    
+                    # FFN activation
+                    if params.use_ffn:
+                        y = ffn_layer(
+                            layer_process(x_att, params.layer_preprocess),
+                            params.ffn_filter_size,
+                            params.hidden_size,
+                            1.0 - params.relu_dropout,
+                            is_training=is_training
+                        )
+                    else:
+                        y = x_att
+
+                    # Gating layer
+                    z = layers.nn.linear(tf.concat([x, y], axis=-1), 
+                        params.hidden_size*2, True, True, scope="z_project")
+                    i, f = tf.split(z, [params.hidden_size, params.hidden_size], axis=-1)
+                    y = tf.sigmoid(i) * x + tf.sigmoid(f) * y
+                    
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                    x = layer_process(x, params.layer_postprocess)
+
+        outputs = layer_process(x, params.layer_preprocess)
+
+        return outputs
+
+def sparse_encoder(inputs, params, dtype=None, scope=None, is_training=True):
+    with tf.variable_scope(scope, default_name="sparse_encoder", dtype=dtype,
+                           values=[inputs]):
+        x = inputs
+        for layer in range(params.num_decoder_layers):
+            with tf.variable_scope("layer_%d" % layer):
+                with tf.variable_scope("self_attention"):
+                    y = layers.attention.sparse_multihead_attention(
+                        layer_process(x, params.layer_preprocess),
+                        None,
+                        params.num_heads,
+                        params.attention_key_channels or params.hidden_size,
+                        params.attention_value_channels or params.hidden_size,
+                        params.hidden_size,
+                        1.0 - params.attention_dropout,
+                    )
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                    x = layer_process(x, params.layer_postprocess)
+
+                with tf.variable_scope("feed_forward"):
+                    y = ffn_layer(
+                        layer_process(x, params.layer_preprocess),
+                        params.ffn_filter_size,
+                        params.hidden_size,
+                        1.0 - params.relu_dropout,
+                        is_training=is_training
+                    )
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                    x = layer_process(x, params.layer_postprocess)
+
+        outputs = layer_process(x, params.layer_preprocess)
+
+        return outputs
+
+def sparse_self_attention(spec, labels, params, is_training=True):
+
+    hidden_size = params.aan_size
+    
+    # concat spectrum and labels(no longer yet) as decoder input
+    dec_input = slim.fully_connected(spec, hidden_size, scope='spec_dec_input')
+    dec_input = slim.dropout(dec_input, 1-params.residual_dropout, is_training=is_training, scope='dec_input_dropout')
+
+    # TODO: position embedding
+    decoder_input = layers.attention.add_timing_signal(dec_input)
+
+    keep_prob = 1.0 - params.residual_dropout
+    decoder_input = slim.dropout(decoder_input, keep_prob, is_training=is_training, scope='dec_input_dropout')
+
+    decoder_outputs = sparse_gate_encoder(decoder_input, params, is_training=is_training)
+    #decoder_outputs = sparse_encoder(decoder_input, params, is_training=is_training)
+
+    return decoder_outputs
 
 def model_graph(features, labels, mode, params, given_memory=None, given_src_mask=None, given_decoder=None, given_position=None):
     hidden_size = params.hidden_size

@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import math
 import tensorflow as tf
+from thumt.layers import sparse_attention as sparse
 
 from thumt.layers.nn import linear
 
@@ -349,3 +350,74 @@ def multihead_attention(queries, memories, bias, num_heads, key_size,
             outputs = x
 
         return {"weights": weights, "outputs": outputs}
+
+def sparse_multihead_attention(queries, memories, num_heads, key_size,
+                        value_size, output_size, keep_prob=None, output=True,
+                        dtype=None, scope=None):
+    """ Multi-head scaled-dot-product attention with input/output
+        transformations.
+
+    :param queries: A tensor with shape [batch, length_q, depth_q] if
+    :param memories: A tensor with shape [batch, length_m, depth_m]
+    :param bias: A tensor (see attention_bias)
+    :param num_heads: An integer dividing key_size and value_size
+    :param key_size: An integer
+    :param value_size: An integer
+    :param output_size: An integer
+    :param keep_prob: A floating point number in (0, 1]
+    :param output: Whether to use output transformation
+    :param dtype: An optional instance of tf.DType
+    :param scope: An optional string
+
+    :returns: A dict with the following keys:
+        weights: A tensor with shape [batch, length_q]
+        outputs: A tensor with shape [batch, length_q, depth_v]
+    """
+
+    if key_size % num_heads != 0:
+        raise ValueError("Key size (%d) must be divisible by the number of "
+                         "attention heads (%d)." % (key_size, num_heads))
+
+    if value_size % num_heads != 0:
+        raise ValueError("Value size (%d) must be divisible by the number of "
+                         "attention heads (%d)." % (value_size, num_heads))
+
+    with tf.variable_scope(scope, default_name="multihead_attention",
+                           values=[queries, memories], dtype=dtype):
+        if memories is None:
+            # self attention
+            size = key_size * 2 + value_size
+            combined = linear(queries, size, True, True, scope="qkv_transform")
+            q, k, v = tf.split(combined, [key_size, key_size, value_size],
+                               axis=-1)
+        else:
+            q = linear(queries, key_size, True, True, scope="q_transform")
+            combined = linear(memories, key_size + value_size, True,
+                              scope="kv_transform")
+            k, v = tf.split(combined, [key_size, value_size], axis=-1)
+
+        # scale query
+        key_depth_per_head = key_size // num_heads
+        q *= key_depth_per_head ** -0.5
+
+        # attention
+        # # first step of strided attention
+        ctx = 32#128#16#
+        #blk_size = 32
+        #local_attn = sparse.blocksparse_attention_impl(q, k, v, heads=num_heads, attn_mode="local", local_attn_ctx=ctx, blocksize=blk_size, keep_prob=keep_prob, recompute=True)
+        local_attn = sparse.attention_impl(q, k, v, heads=num_heads, attn_mode="local", local_attn_ctx=ctx, keep_prob=keep_prob, recompute=True)
+
+        # # second step of strided attention
+        ctx = 4
+        #strided_attn=sparse.blocksparse_attention_impl(q, k, v, heads=num_heads, attn_mode="strided", local_attn_ctx=ctx, blocksize=blk_size, keep_prob=keep_prob, recompute=True)
+        strided_attn=sparse.attention_impl(q, k, v, heads=num_heads, attn_mode="strided", local_attn_ctx=ctx, keep_prob=keep_prob, recompute=True)
+
+        x = tf.add(local_attn, strided_attn)#local_attn#
+        
+        if output:
+            outputs = linear(x, output_size, True, True,
+                             scope="output_transform")
+        else:
+            outputs = x
+
+        return outputs
