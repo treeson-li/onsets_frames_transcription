@@ -5,7 +5,7 @@ from blocksparse import BlocksparseTransformer
 from thumt.layers.sparse_utils import shape_list, recomputable
 
 
-def get_attn_mask(n, attn_mode, local_attn_ctx=None):
+def get_attn_mask(n, attn_mode, local_attn_ctx=None):    
     if attn_mode == 'all':
         b = tf.matrix_band_part(tf.ones([n, n]), -1, 0)
     elif attn_mode == 'local':
@@ -27,6 +27,8 @@ def get_attn_mask(n, attn_mode, local_attn_ctx=None):
         bandwidth = local_attn_ctx
         ctx = tf.minimum(n - 1, bandwidth - 1)//2
         b = tf.matrix_band_part(tf.ones([n, n]), ctx, ctx)
+    elif attn_mode == 'full':
+        b = tf.ones([n, n])
     else:
         raise ValueError('Not yet implemented')
     b = tf.reshape(b, [1, 1, n, n])

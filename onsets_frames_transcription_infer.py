@@ -44,6 +44,11 @@ import numpy as np
 import scipy
 import tensorflow as tf
 
+#np.set_printoptions(threshold=np.inf)
+
+import xlwt
+xls = xlwt.Workbook()
+sheet1 = xls.add_sheet('Sheet1')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -51,15 +56,15 @@ tf.app.flags.DEFINE_string('master', '',
                            'Name of the TensorFlow runtime to use.')
 tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
-tf.app.flags.DEFINE_string('model_dir', None, 'Path to look for checkpoints.')
+tf.app.flags.DEFINE_string('model_dir', '~/data/score_attention_cxt128', 'Path to look for checkpoints.')
 tf.app.flags.DEFINE_string(
-    'checkpoint_path', '~/data/onsets_frames_ori',
+    'checkpoint_path', None,
     'Filename of the checkpoint to use. If not specified, will use the latest '
     'checkpoint')
-tf.app.flags.DEFINE_string('examples_path', '/media/admin1/Windows/MAPS_TFRECORD/maps_config2_test.tfrecord',
+tf.app.flags.DEFINE_string('examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_train_spec.tfrecord',
                            'Path to test examples TFRecord.')
 tf.app.flags.DEFINE_string(
-    'output_dir', '~/tmp/onsets_frames/infer',
+    'output_dir', '~/data/score_attention_cxt128/infer',
     'Path to store output midi files and summary events.')
 tf.app.flags.DEFINE_string(
     'hparams', '',
@@ -74,7 +79,7 @@ tf.app.flags.DEFINE_float(
     'offset_threshold', 0.5,
     'Threshold to use when sampling from the acoustic model.')
 tf.app.flags.DEFINE_integer(
-    'max_seconds_per_sequence', None,
+    'max_seconds_per_sequence', 250,
     'If set, will truncate sequences to be at most this many seconds long.')
 tf.app.flags.DEFINE_boolean(
     'require_onset', True,
@@ -87,7 +92,7 @@ tf.app.flags.DEFINE_boolean(
     'If set, will re-run inference every time a new checkpoint is written. '
     'And will only output the final results.')
 tf.app.flags.DEFINE_string(
-    'log', 'INFO',
+    'log', 'DEBUG',
     'The threshold for what messages will be logged: '
     'DEBUG, INFO, WARN, ERROR, or FATAL.')
 
@@ -115,7 +120,7 @@ def model_inference(model_fn,
 
     dataset = data.provide_batch(
         examples=examples_path,
-        preprocess_examples=True,
+        preprocess_examples=False,
         hparams=hparams,
         is_training=False)
 
@@ -150,6 +155,7 @@ def model_inference(model_fn,
       num_frames = []
 
       sess.run(iterator.initializer)
+      whileIndex = 0
       while True:
         try:
           record = sess.run(next_record)
@@ -185,6 +191,9 @@ def model_inference(model_fn,
         onset_probs = prediction_list[0]['onset_probs_flat']
         velocity_values = prediction_list[0]['velocity_values_flat']
         offset_probs = prediction_list[0]['offset_probs_flat']
+        onset_loss = prediction_list[0]['onset_loss']
+        onset_label_enc = prediction_list[0]['onset_label_enc']
+        onset_labels = prediction_list[0]['onset_labels']
 
         frame_predictions = frame_probs > FLAGS.frame_threshold
         if FLAGS.require_onset:
@@ -196,6 +205,13 @@ def model_inference(model_fn,
           offset_predictions = offset_probs > FLAGS.offset_threshold
         else:
           offset_predictions = None
+
+        print('+'*80)
+        print('frame_probs:', np.shape(frame_probs))
+        print('labels:', np.shape(labels))
+        print('onset_loss:', onset_loss)
+        print('onset_label_enc:', onset_label_enc)
+        print('onset_labels:', onset_labels)
 
         sequence_prediction = sequences_lib.pianoroll_to_note_sequence(
             frame_predictions,
@@ -241,7 +257,10 @@ def model_inference(model_fn,
             sequence_prediction=sequence_prediction,
             frames_per_second=data.hparams_frames_per_second(hparams),
             sequence_label=sequence_label,
-            sequence_id=filename)
+            sequence_id=filename,
+            index=whileIndex,
+            sheet=sheet1)
+        whileIndex += 1
 
         if write_summary_every_step:
           # Make filenames UNIX-friendly.
@@ -274,7 +293,7 @@ def model_inference(model_fn,
           summary = sess.run(summary_op)
           summary_writer.add_summary(summary, sess.run(global_step))
           summary_writer.flush()
-
+      xls.save('results.xls')
       if not write_summary_every_step:
         # Only write the summary variables for the final step.
         summary = sess.run(summary_op)

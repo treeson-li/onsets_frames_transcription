@@ -214,8 +214,18 @@ def score_sequence(session, global_step_increment, metrics_to_updates,
                    metric_note_recall_with_offsets_velocity,
                    metric_note_f1_with_offsets_velocity, metric_frame_labels,
                    metric_frame_predictions, frame_labels, sequence_prediction,
-                   frames_per_second, sequence_label, sequence_id):
+                   frames_per_second, sequence_label, sequence_id, index, sheet):
   """Calculate metrics on the inferred sequence."""
+  def pad_sequence_to_len(a, len):
+      if a.shape[0] < len:
+          # Pad transcribed frames with silence.
+          pad_length = len - a.shape[0]
+          a = np.pad(a, [(0, pad_length)], 'constant')
+      elif a.shape[0] > len:
+          # Truncate transcribed frames.
+          a = a[:len]
+      return a
+
   est_intervals, est_pitches, est_velocities = sequence_to_valued_intervals(
       sequence_prediction)
 
@@ -241,7 +251,8 @@ def score_sequence(session, global_step_increment, metrics_to_updates,
 
   (sequence_note_precision_with_offsets_velocity,
    sequence_note_recall_with_offsets_velocity,
-   sequence_note_f1_with_offsets_velocity, _) = (
+   sequence_note_f1_with_offsets_velocity, _) = (0, 0, 0, 0)
+  '''(
        mir_eval.transcription_velocity.precision_recall_f1_overlap(
            ref_intervals=ref_intervals,
            ref_pitches=pretty_midi.note_number_to_hz(ref_pitches),
@@ -249,7 +260,7 @@ def score_sequence(session, global_step_increment, metrics_to_updates,
            est_intervals=est_intervals,
            est_pitches=pretty_midi.note_number_to_hz(est_pitches),
            est_velocities=est_velocities))
-
+  '''
   frame_predictions = sequences_lib.sequence_to_pianoroll(
       sequence_prediction,
       frames_per_second=frames_per_second,
@@ -265,7 +276,7 @@ def score_sequence(session, global_step_increment, metrics_to_updates,
     # Truncate transcribed frames.
     frame_predictions = frame_predictions[:frame_labels.shape[0], :]
 
-  global_step, _ = session.run(
+  global_step, _metrics = session.run(
       [global_step_increment, metrics_to_updates], {
           metric_frame_predictions:
               frame_predictions,
@@ -293,6 +304,18 @@ def score_sequence(session, global_step_increment, metrics_to_updates,
 
   tf.logging.info('Updating scores for %s: Step= %d, Note F1=%f', sequence_id,
                   global_step, sequence_note_f1)
+  print('Updating scores for ', sequence_id, 'Step= ', global_step, 'Note F1=', sequence_note_f1)
+  if index == 0:
+      i = 0
+      for key, val in _metrics.items():
+          sheet.write(0, i, key.split('/')[1])
+          sheet.write(1, i, str(val))
+          i += 1
+  else:
+      i = 0
+      for key, val in _metrics.items():
+          sheet.write(index+1, i, str(val))
+          i += 1
 
 
 def posterior_pianoroll_image(frame_probs, sequence_prediction,

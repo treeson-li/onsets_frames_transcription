@@ -345,7 +345,8 @@ def preprocess_data(sequence_id, sequence, audio, velocity_range, hparams,
 
 
 FeatureTensors = collections.namedtuple(
-    'FeatureTensors', ('spec', 'length', 'sequence_id', 'spectrogram_hash'))
+    'FeatureTensors', ('spec', 'length', 'sequence_id', 'spectrogram_hash',
+                      'labels', 'label_weights', 'onsets', 'offsets', 'velocities'))
 LabelTensors = collections.namedtuple(
     'LabelTensors', ('labels', 'label_weights', 'onsets', 'offsets',
                      'velocities', 'note_sequence'))
@@ -427,7 +428,12 @@ def _provide_data(input_tensors, hparams, is_training):
       spec=tf.reshape(spec, (final_length, hparams_frame_size(hparams), 1)),
       length=truncated_length,
       sequence_id=tf.constant(0) if is_training else input_tensors.sequence_id,
-      spectrogram_hash=spectrogram_hash)
+      spectrogram_hash=spectrogram_hash,
+      labels=tf.reshape(labels, (final_length, constants.MIDI_PITCHES)),
+      label_weights=tf.reshape(label_weights, (final_length, constants.MIDI_PITCHES)),
+      onsets=tf.reshape(onsets, (final_length, constants.MIDI_PITCHES)),
+      offsets=tf.reshape(offsets, (final_length, constants.MIDI_PITCHES)),
+      velocities=tf.reshape(velocities, (final_length, constants.MIDI_PITCHES)))
   labels = LabelTensors(
       labels=tf.reshape(labels, (final_length, constants.MIDI_PITCHES)),
       label_weights=tf.reshape(label_weights,

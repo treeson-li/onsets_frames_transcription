@@ -39,7 +39,7 @@ tf.app.flags.DEFINE_boolean(
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/data/transformer_attention/',
+    'model_dir', '~/data/score_attention_cxt128_head4',#score_attention_cxt128',#score_attention_cxt32/',#score_attention_cxt128/',#
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')

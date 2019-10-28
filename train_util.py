@@ -98,8 +98,34 @@ def create_estimator(model_fn,
       config=config,
       warm_start_from=warm_start_from,
       eval_on_tpu=False)
+'''
+def create_estimator(model_fn,
+                     model_dir,
+                     hparams,
+                     use_tpu=False,
+                     master='',
+                     save_checkpoint_steps=50000,
+                     save_summary_steps=50000,
+                     keep_checkpoint_max=5,
+                     warm_start_from=None):
+  """Creates an estimator."""
+  NUM_GPUS = 4
+  mirrored_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=NUM_GPUS)
+  config = tf.estimator.RunConfig(
+    train_distribute=mirrored_strategy,
+    eval_distribute=mirrored_strategy,
+    save_summary_steps=save_summary_steps,
+    save_checkpoints_steps=save_checkpoint_steps,
+    keep_checkpoint_max=keep_checkpoint_max,
+    keep_checkpoint_every_n_hours=2)
 
-
+  params = copy.deepcopy(hparams)
+  return tf.estimator.Estimator(model_fn=model_fn,
+                                  model_dir=model_dir,
+                                  config=config,
+                                  params=params,
+                                  warm_start_from=warm_start_from)
+'''
 def train(master,
           model_fn,
           model_dir,
