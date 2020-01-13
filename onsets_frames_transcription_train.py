@@ -32,14 +32,14 @@ tf.app.flags.DEFINE_string('master', '',
 tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
 tf.app.flags.DEFINE_string(
-    'examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_train_spec.tfrecord',
+    'examples_path', '/home/liming/data/tfrecord/maps/maps_config2_train_spec.tfrecord',
     'Path to a TFRecord file of train/eval examples.')
 tf.app.flags.DEFINE_boolean(
     'preprocess_examples', False,
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/data/score_attention_cxt128_head4',#score_attention_cxt128',#score_attention_cxt32/',#score_attention_cxt128/',#
+    'model_dir', '~/data/score_cxt128label',#score_attention_cxt128_head4',#score_attention_cxt128',#score_attention_cxt32/',#score_attention_cxt128/',#
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')

@@ -378,15 +378,9 @@ def model_fn(features, labels, mode, params, config):
     frame_labels = features.labels
     frame_label_weights = features.label_weights
 
-  print('onset_labels:', onset_labels)
-  print('offset_labels:', offset_labels)
-  print('velocity_labels:', velocity_labels)
-  print('frame_labels:', frame_labels)
-  print('frame_label_weights:', frame_label_weights)
-
   if hparams.stop_activation_gradient and not hparams.activation_loss:
     raise ValueError(
-        'If stop_activation_gradient is true, activation_loss must be true.')
+      'If stop_activation_gradient is true, activation_loss must be true.')
 
   losses = {}
   if not is_training:
@@ -394,16 +388,17 @@ def model_fn(features, labels, mode, params, config):
 
   with slim.arg_scope([slim.batch_norm, slim.dropout], is_training=is_training):
     with tf.variable_scope('onsets'):
+      '''
       onset_label_enc = encoder_prepare(onset_labels,
                                   hparams.onset_lstm_units,
                                   lengths=length,
                                   is_training=is_training,
                                   params=hparams)
-      
+      '''
       spec_enc_4onset = acoustic_model(spec, hparams, hparams.spec_lstm_units, length, is_training)
       onset_outputs = transformer_att.sparse_multihead_attention(
                                   queries=spec_enc_4onset,
-                                  memories=onset_label_enc,
+                                  memories=onset_labels,
                                   num_heads=params.num_heads,
                                   key_size=params.onset_lstm_units,
                                   value_size=params.onset_lstm_units,
@@ -415,10 +410,6 @@ def model_fn(features, labels, mode, params, config):
                                       constants.MIDI_PITCHES,
                                       activation_fn=tf.sigmoid,
                                       scope='onset_probs')
-      tf.summary.histogram('onset_label_enc', onset_label_enc) 
-      tf.summary.histogram('spec_enc_4onset', spec_enc_4onset)
-      tf.summary.histogram('onset_outputs', onset_outputs)
-      tf.summary.histogram('onset_probs', onset_probs)
       # onset_probs_flat is used during inference.
       onset_probs_flat = flatten_maybe_padded_sequences(onset_probs, length)
       if is_training or True:
@@ -427,15 +418,17 @@ def model_fn(features, labels, mode, params, config):
         tf.losses.add_loss(tf.reduce_mean(onset_losses))
         losses['onset'] = tf.reduce_mean(onset_losses)
     with tf.variable_scope('offsets'):
+      '''
       offset_lable_enc = encoder_prepare(offset_labels,
                                   hparams.offset_lstm_units,
                                   lengths=length,
                                   is_training=is_training,
                                   params=hparams)
+                                  '''
       spec_enc_4offsets = acoustic_model(spec, hparams, lstm_units=hparams.offset_lstm_units, lengths=length, is_training=is_training)
       offset_outputs = transformer_att.sparse_multihead_attention(
                                   queries=spec_enc_4offsets,
-                                  memories=offset_lable_enc,
+                                  memories=offset_labels,
                                   num_heads=params.num_heads,
                                   key_size=params.offset_lstm_units,
                                   value_size=params.offset_lstm_units,
@@ -448,10 +441,6 @@ def model_fn(features, labels, mode, params, config):
           activation_fn=tf.sigmoid,
           scope='offset_probs')
 
-      tf.summary.histogram('offset_lable_enc', offset_lable_enc) 
-      tf.summary.histogram('spec_enc_4offsets', spec_enc_4offsets)
-      tf.summary.histogram('offset_outputs', offset_outputs)
-      tf.summary.histogram('offset_probs', offset_probs)
       # offset_probs_flat is used during inference.
       offset_probs_flat = flatten_maybe_padded_sequences(offset_probs, length)
       if is_training:
@@ -473,9 +462,6 @@ def model_fn(features, labels, mode, params, config):
           activation_fn=None,
           scope='onset_velocities')
 
-      tf.summary.histogram('velocity_outputs', velocity_outputs) 
-      tf.summary.histogram('velocity_values', velocity_values)
-      
       velocity_values_flat = flatten_maybe_padded_sequences(
           velocity_values, length)
       if is_training:
@@ -528,11 +514,13 @@ def model_fn(features, labels, mode, params, config):
       combined_probs = tf.concat(probs, 2)
 
       if hparams.combined_lstm_units > 0:
+        '''
         frame_label_enc = encoder_prepare(frame_label_weights,
                                   hparams.combined_lstm_units,                                                
                                   length,
                                   is_training=is_training,
                                   params=hparams)
+                                  '''
         frame_query_enc = encoder_prepare(
                                   combined_probs,
                                   hparams.combined_lstm_units,
@@ -541,7 +529,7 @@ def model_fn(features, labels, mode, params, config):
                                   params=hparams)
         frame_outputs = transformer_att.sparse_multihead_attention(
                                   queries=frame_query_enc,
-                                  memories=frame_label_enc,
+                                  memories=frame_label_weights,
                                   num_heads=params.num_heads,
                                   key_size=params.combined_lstm_units,
                                   value_size=params.combined_lstm_units,
@@ -557,11 +545,6 @@ def model_fn(features, labels, mode, params, config):
           activation_fn=tf.sigmoid,
           scope='frame_probs')
     
-      tf.summary.histogram('frame_label_enc', frame_label_enc) 
-      tf.summary.histogram('frame_query_enc', frame_query_enc)
-      tf.summary.histogram('frame_outputs', frame_outputs)
-      tf.summary.histogram('frame_probs', frame_probs)
-
     frame_probs_flat = flatten_maybe_padded_sequences(frame_probs, length)
 
     if is_training:
@@ -670,11 +653,11 @@ def get_default_hparams():
       clip_norm=3.0,
       transform_audio=True,
       spec_lstm_units=256,
-      onset_lstm_units=256,
-      offset_lstm_units=256,
+      onset_lstm_units=88,#256,
+      offset_lstm_units=88,#256,
       velocity_lstm_units=0,
       frame_lstm_units=0,
-      combined_lstm_units=256,
+      combined_lstm_units=88,#256,
       acoustic_rnn_stack_size=1,
       combined_rnn_stack_size=1,
       encoder_rnn_stack_size=1,
