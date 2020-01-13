@@ -294,6 +294,7 @@ def score_sequence(session, global_step_increment, metrics_to_updates,
 
     tf.logging.info('Updating scores for %s: Step= %d, Note F1=%f', sequence_id,
                     global_step, sequence_note_f1)
+    print('Updating scores for ', sequence_id, 'Step= ', global_step, 'Note F1=', sequence_note_f1)
     if index == 0:
         i = 0
         for key, val in _metrics.items():

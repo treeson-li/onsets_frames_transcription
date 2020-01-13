@@ -32,14 +32,14 @@ tf.app.flags.DEFINE_string('master', '',
 tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
 tf.app.flags.DEFINE_string(
-    'examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_train_spec.tfrecord',
+    'examples_path', '/home/liming/data/tfrecord/maps/maps_config2_train_spec.tfrecord',
     'Path to a TFRecord file of train/eval examples.')
 tf.app.flags.DEFINE_boolean(
     'preprocess_examples', False,
     'Whether to preprocess examples or assume they have already been '
     'preprocessed.')
 tf.app.flags.DEFINE_string(
-    'model_dir', '~/data/sparse_cxt32stride4ffn2048/',#sparse_cxt128ffn512head4layer6', #sparse_cxt128ffn512', #'~/data/sparse_gate/',#
+    'model_dir', '~/data/arc_df256cnnRes',#arc_df256cnn',#arc_d13cnn',#car',#arc_stack2cnn',#arc_d_cnn1024',#arc_d_cnn2',#arc_d_cnn',#arc_dcnn',#arc_gcnn',#arc_cnn2',#arc_try',#sparse_cxt128layer1head2',#sparse_cxt128layer2',#sparse_cxt256layer1',#sparse_cxt128layer1',#sparse_cxt128ffn512head8',#sparse_cxt32stride4ffn2048/',#sparse_cxt128ffn512head4layer6', #sparse_cxt128ffn512', #'~/data/sparse_gate/',#
     'Path where checkpoints and summary events will be located during '
     'training and evaluation.')
 tf.app.flags.DEFINE_string('eval_name', None, 'Name for this eval run.')

@@ -7,8 +7,8 @@ from __future__ import print_function
 
 import math
 import tensorflow as tf
-from thumt.layers import sparse_attention as sparse
-
+#from thumt.layers import sparse_attention as sparse
+from thumt.layers import sparse
 from thumt.layers.nn import linear
 
 
@@ -402,17 +402,17 @@ def sparse_multihead_attention(queries, memories, num_heads, key_size,
 
         # attention
         # # first step of strided attention
-        ctx = 32#128#16#
+        ctx = 128#64#256#32#16#
         #blk_size = 32
         #local_attn = sparse.blocksparse_attention_impl(q, k, v, heads=num_heads, attn_mode="local", local_attn_ctx=ctx, blocksize=blk_size, keep_prob=keep_prob, recompute=True)
-        local_attn = sparse.attention_impl(q, k, v, heads=num_heads, attn_mode="local", local_attn_ctx=ctx, keep_prob=keep_prob, recompute=True)
+        local_attn = sparse.attention_impl(q, k, v, heads=num_heads, attn_mode="local", local_attn_ctx=ctx, keep_prob=keep_prob)
 
         # # second step of strided attention
         ctx = 4
         #strided_attn=sparse.blocksparse_attention_impl(q, k, v, heads=num_heads, attn_mode="strided", local_attn_ctx=ctx, blocksize=blk_size, keep_prob=keep_prob, recompute=True)
-        strided_attn=sparse.attention_impl(q, k, v, heads=num_heads, attn_mode="strided", local_attn_ctx=ctx, keep_prob=keep_prob, recompute=True)
+        #strided_attn=sparse.attention_impl(q, k, v, heads=num_heads, attn_mode="strided", local_attn_ctx=ctx, keep_prob=keep_prob, recompute=True)
 
-        x = tf.add(local_attn, strided_attn)#local_attn#
+        x = local_attn#tf.add(local_attn, strided_attn)#
         
         if output:
             outputs = linear(x, output_size, True, True,

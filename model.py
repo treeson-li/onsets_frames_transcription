@@ -243,6 +243,7 @@ def model_fn(features, labels, mode, params, config):
     velocity_labels = None
     frame_labels = None
     frame_label_weights = None
+    params.attention_dropout = 0
 
   if hparams.stop_activation_gradient and not hparams.activation_loss:
     raise ValueError(
@@ -480,7 +481,7 @@ def get_default_hparams():
     hyperparameters for the model.
   """
   return tf.contrib.training.HParams(
-      batch_size=8,
+      batch_size=7,#8,#
       learning_rate=0.0006,
       decay_steps=10000,
       decay_rate=0.98,
@@ -517,9 +518,9 @@ def get_default_hparams():
       avg_len=45,
       residual_dropout=0.1,
       relu_dropout=0.0,
-      num_decoder_layers=4,#6,#
-      use_ffn=True,#False,#
-      ffn_filter_size=2048,#512,#
+      num_decoder_layers=1,#4,#2,#      
+      use_ffn=False,#True,#
+      ffn_filter_size=512,#2048,#
       layer_preprocess="layer_norm",
       layer_postprocess="layer_norm",
       num_heads=4,#8,#

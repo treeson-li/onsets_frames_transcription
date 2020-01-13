@@ -43,6 +43,7 @@ from magenta.protobuf import music_pb2
 import numpy as np
 import scipy
 import tensorflow as tf
+from post_dtw import PostDTW
 
 import xlwt
 xls = xlwt.Workbook()
@@ -54,15 +55,15 @@ tf.app.flags.DEFINE_string('master', '',
                            'Name of the TensorFlow runtime to use.')
 tf.app.flags.DEFINE_string('config', 'onsets_frames',
                            'Name of the config to use.')
-tf.app.flags.DEFINE_string('model_dir', '/home/admin1/data/sparse_cxt128ffn512/', 'Path to look for checkpoints.')
+tf.app.flags.DEFINE_string('model_dir', '/home/liming/data/arc_df256cnnRes/', 'Path to look for checkpoints.')
 tf.app.flags.DEFINE_string(
     'checkpoint_path', None,
     'Filename of the checkpoint to use. If not specified, will use the latest '
     'checkpoint')
-tf.app.flags.DEFINE_string('examples_path', '/home/admin1/data/tfrecord/maps/maps_config2_test_spec.tfrecord',
+tf.app.flags.DEFINE_string('examples_path', '/home/liming/data/tfrecord/maps/maps_config2_test_spec.tfrecord',
                            'Path to test examples TFRecord.')
 tf.app.flags.DEFINE_string(
-    'output_dir', '/home/admin1/data/sparse_cxt128ffn512/infer',
+    'output_dir', '/home/liming/data/arc_df256cnnRes/infer',
     'Path to store output midi files and summary events.')
 tf.app.flags.DEFINE_string(
     'hparams', '',
@@ -77,7 +78,7 @@ tf.app.flags.DEFINE_float(
     'offset_threshold', 0.5,
     'Threshold to use when sampling from the acoustic model.')
 tf.app.flags.DEFINE_integer(
-    'max_seconds_per_sequence', 300,
+    'max_seconds_per_sequence', 250,
     'If set, will truncate sequences to be at most this many seconds long.')
 tf.app.flags.DEFINE_boolean(
     'require_onset', True,
@@ -189,7 +190,10 @@ def model_inference(model_fn,
         onset_probs = prediction_list[0]['onset_probs_flat']
         velocity_values = prediction_list[0]['velocity_values_flat']
         offset_probs = prediction_list[0]['offset_probs_flat']
-
+        '''
+        dtw = PostDTW()
+        frame_probs = dtw.align_play_on_score_offline(frame_probs, labels) #refine values according to music reference
+        '''
         frame_predictions = frame_probs > FLAGS.frame_threshold
         if FLAGS.require_onset:
           onset_predictions = onset_probs > FLAGS.onset_threshold
@@ -268,6 +272,7 @@ def model_inference(model_fn,
                                                filename_safe + '_pianoroll.png')
           tf.logging.info('Writing acoustic logit/label file to %s',
                           pianoroll_output_file)
+          '''
           with tf.gfile.GFile(pianoroll_output_file, mode='w') as f:
             scipy.misc.imsave(
                 f,
@@ -277,7 +282,7 @@ def model_inference(model_fn,
                     labels,
                     overlap=True,
                     frames_per_second=data.hparams_frames_per_second(hparams)))
-
+          '''
           summary = sess.run(summary_op)
           summary_writer.add_summary(summary, sess.run(global_step))
           summary_writer.flush()

@@ -323,6 +323,174 @@ def sparse_encoder(inputs, params, dtype=None, scope=None, is_training=True):
 
         return outputs
 
+def ARC_encoder(inputs, params, dtype=None, scope=None, is_training=True):
+    with tf.variable_scope(scope, default_name="ARC_encoder", dtype=dtype,
+                           values=[inputs]):
+        x = inputs
+        for layer in range(params.num_decoder_layers):
+            with tf.variable_scope("layer_%d" % layer):
+                with tf.variable_scope("self_attention"):
+                    x_att = layers.attention.sparse_multihead_attention(
+                        layer_process(x, params.layer_preprocess),
+                        None,
+                        params.num_heads,
+                        params.attention_key_channels or params.hidden_size,
+                        params.attention_value_channels or params.hidden_size,
+                        params.hidden_size,
+                        1.0 - params.attention_dropout,
+                    )
+                    y = x_att
+                    # Gating layer
+                    z = layers.nn.linear(tf.concat([x, y], axis=-1), 
+                        params.hidden_size*2, True, True, scope="z_project")
+                    i, f = tf.split(z, [params.hidden_size, params.hidden_size], axis=-1)
+                    y = tf.sigmoid(i) * x + tf.sigmoid(f) * y
+                    
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                    x = layer_process(x, params.layer_postprocess)
+                '''
+                for cnn_stack in range(1):
+                    with tf.variable_scope("cnn_stack_%d" % cnn_stack):
+                        y = x
+                        filters = [256, 512, 512]#[512, 1024, 1024]#
+                        with slim.arg_scope([slim.conv2d, slim.fully_connected],
+                                                activation_fn=tf.nn.relu,
+                                                normalizer_fn=slim.batch_norm,
+                                                weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG', uniform=True)):
+                            dilated_rate = [1, 3, 5]#[1, 1, 1]#
+                            for cnn_layer in range(3):
+                                y = slim.conv1d(y, filters[cnn_layer], [3], rate=dilated_rate[cnn_layer], scope='cnn_' + str(cnn_layer))
+                                y = slim.dropout(y, keep_prob=0.9, scope='cnn_dropout' + str(cnn_layer))
+
+                            # Flatten while preserving batch and time dimensions.
+                            y = slim.fully_connected(y, params.hidden_size, scope='fc_end')
+                            x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                            x = layer_process(x, params.layer_postprocess)
+                '''
+                print('-'*100)
+                print('shape of x: ', x.shape)
+                with tf.variable_scope("cnn_net"):
+                    y = x
+                    filters = [256, 512, 512]#[256, 256, 256]#
+                    with slim.arg_scope([slim.conv2d, slim.fully_connected],
+                                            activation_fn=tf.nn.relu,
+                                            normalizer_fn=slim.batch_norm,
+                                            weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG', uniform=True)):
+                        dilated_rate = [1, 3, 5]#[1, 5, 13]#[1, 1, 1]#
+                        for cnn_layer in range(3):
+                            y = slim.conv1d(y, filters[cnn_layer], [3], rate=dilated_rate[cnn_layer], scope='cnn_' + str(cnn_layer))
+                            #y = slim.dropout(y, keep_prob=0.9, scope='cnn_dropout' + str(cnn_layer))                            
+                            y = residual_fn(x, y, 1.0 - params.residual_dropout) # add residual 
+
+                        # Flatten while preserving batch and time dimensions.
+                        print('-'*100)
+                        print('shape of y: ', y.shape)
+                        y = slim.fully_connected(y, params.hidden_size, scope='fc_end')
+                        x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                        x = layer_process(x, params.layer_postprocess)
+                        
+
+        outputs = layer_process(x, params.layer_preprocess)
+
+        return outputs
+
+def CAR_encoder(inputs, params, dtype=None, scope=None, is_training=True):
+    with tf.variable_scope(scope, default_name="ARC_encoder", dtype=dtype,
+                           values=[inputs]):
+        x = inputs
+        for layer in range(params.num_decoder_layers):
+            with tf.variable_scope("layer_%d" % layer):
+                for cnn_stack in range(1):
+                    with tf.variable_scope("cnn_stack_%d" % cnn_stack):
+                        y = x
+                        filters = [256, 512, 512]#[512, 1024, 1024]#
+                        with slim.arg_scope([slim.conv2d, slim.fully_connected],
+                                                activation_fn=tf.nn.relu,
+                                                normalizer_fn=slim.batch_norm,
+                                                weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG', uniform=True)):
+                            dilated_rate = [1, 3, 5]#[1, 1, 1]#
+                            for cnn_layer in range(3):
+                                y = slim.conv1d(y, filters[cnn_layer], [3], rate=dilated_rate[cnn_layer], scope='cnn_' + str(cnn_layer))
+                                y = slim.dropout(y, keep_prob=0.9, scope='cnn_dropout' + str(cnn_layer))
+
+                            # Flatten while preserving batch and time dimensions.
+                            y = slim.fully_connected(y, params.hidden_size, scope='fc_end')
+                            x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                            x = layer_process(x, params.layer_postprocess)
+            
+            with tf.variable_scope("self_attention"):
+                    x_att = layers.attention.sparse_multihead_attention(
+                        layer_process(x, params.layer_preprocess),
+                        None,
+                        params.num_heads,
+                        params.attention_key_channels or params.hidden_size,
+                        params.attention_value_channels or params.hidden_size,
+                        params.hidden_size,
+                        1.0 - params.attention_dropout,
+                    )
+                    y = x_att
+                    # Gating layer
+                    z = layers.nn.linear(tf.concat([x, y], axis=-1), 
+                        params.hidden_size*2, True, True, scope="z_project")
+                    i, f = tf.split(z, [params.hidden_size, params.hidden_size], axis=-1)
+                    y = tf.sigmoid(i) * x + tf.sigmoid(f) * y
+                    
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                    x = layer_process(x, params.layer_postprocess)
+                
+        outputs = layer_process(x, params.layer_preprocess)
+
+        return outputs
+
+def ARCg_encoder(inputs, params, dtype=None, scope=None, is_training=True):
+    with tf.variable_scope(scope, default_name="ARC_encoder", dtype=dtype,
+                           values=[inputs]):
+        x = inputs
+        for layer in range(params.num_decoder_layers):
+            with tf.variable_scope("layer_%d" % layer):
+                with tf.variable_scope("self_attention"):
+                    x_att = layers.attention.sparse_multihead_attention(
+                        layer_process(x, params.layer_preprocess),
+                        None,
+                        params.num_heads,
+                        params.attention_key_channels or params.hidden_size,
+                        params.attention_value_channels or params.hidden_size,
+                        params.hidden_size,
+                        1.0 - params.attention_dropout,
+                    )
+                    y = x_att
+                    # Gating layer
+                    z = layers.nn.linear(tf.concat([x, y], axis=-1), 
+                        params.hidden_size*2, True, True, scope="z_project")
+                    i, f = tf.split(z, [params.hidden_size, params.hidden_size], axis=-1)
+                    y = tf.sigmoid(i) * x + tf.sigmoid(f) * y
+                    
+                    x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                    x = layer_process(x, params.layer_postprocess)
+                
+                with tf.variable_scope("cnn_net"):
+                    y = x
+                    filters = [512, 512, 512]
+                    dilated_rate = [1, 3, 5]#[1, 1, 1]#
+                    with slim.arg_scope([slim.conv2d, slim.fully_connected],
+                                            activation_fn=tf.nn.relu,
+                                            normalizer_fn=slim.batch_norm,
+                                            weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG', uniform=True)):
+                        for cnn_layer in range(3):
+                            z = slim.conv1d(y, filters[cnn_layer], [3], rate=dilated_rate[cnn_layer], scope='cnn_' + str(cnn_layer))
+                            z = slim.dropout(z, keep_prob=0.9, scope='cnn_dropout' + str(cnn_layer))
+                            i, f = tf.split(z, [params.hidden_size, params.hidden_size], axis=-1)
+                            y = tf.sigmoid(i) * tf.tanh(f)
+
+                        # Flatten while preserving batch and time dimensions.                        
+                        y = slim.fully_connected(y, params.hidden_size, scope='fc_end')
+                        x = residual_fn(x, y, 1.0 - params.residual_dropout)
+                        x = layer_process(x, params.layer_postprocess)
+
+        outputs = layer_process(x, params.layer_preprocess)
+
+        return outputs
+
 def sparse_self_attention(spec, labels, params, is_training=True):
 
     hidden_size = params.aan_size
@@ -337,7 +505,10 @@ def sparse_self_attention(spec, labels, params, is_training=True):
     keep_prob = 1.0 - params.residual_dropout
     decoder_input = slim.dropout(decoder_input, keep_prob, is_training=is_training, scope='dec_input_dropout')
 
-    decoder_outputs = sparse_gate_encoder(decoder_input, params, is_training=is_training)
+    #decoder_outputs = ARCg_encoder(decoder_input, params, is_training=is_training)
+    decoder_outputs = ARC_encoder(decoder_input, params, is_training=is_training)
+    #decoder_outputs = CAR_encoder(decoder_input, params, is_training=is_training)
+    #decoder_outputs = sparse_gate_encoder(decoder_input, params, is_training=is_training)
     #decoder_outputs = sparse_encoder(decoder_input, params, is_training=is_training)
 
     return decoder_outputs
